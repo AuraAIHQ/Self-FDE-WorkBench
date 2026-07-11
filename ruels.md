@@ -2,6 +2,11 @@
 
 ## 🎤 AI Sharing Session: Rules & Flow
 
+### Organizer Wrap-up
+
+* To close out the session, the organizer will present a **10-minute update** covering last week's progress and the upcoming plan for Agent Development.
+1. Best way to learn: teaching other guys. reffer to **Feynman Technique**, so i organize this group for you and me.
+
 ### 1. Presentation Time & Sequence
 
 * **Standard Time:** Each speaker has **3 minutes**.
@@ -22,6 +27,3 @@
 * *Note: It is highly recommended to bring your laptop to easily show the step-by-step details.*
 * Everyone who got any tokens, can leave one **question** to the group to improe his/her real question.
 
-### 4. Organizer Wrap-up
-
-* To close out the session, the organizer will present a **10-minute update** covering last week's progress and the upcoming plan for Agent Development.
