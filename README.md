@@ -1,7 +1,8 @@
-# AI Beginner Courses — Learning in Public
+# Self-FDE-Workbench — Learning & Building in Public
 
-> 一个公开的 AI 学习项目。边学边记，边做实验，每周分享。
+> 做自己的FDE，以问题/用户/客户为牵引，落地AI能力到自己和中小组织。边学边记，边做实验，每周meetup。
 > Part of [AuraAI](https://github.com/AuraAIHQ) open learning initiative.
+> [CNX Local Weekly Meetup: https://app.sola.day/event/detail/19717](https://app.sola.day/event/detail/19717)
 
 ---
 
