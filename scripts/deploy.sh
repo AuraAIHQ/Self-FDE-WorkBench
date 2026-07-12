@@ -63,36 +63,45 @@ done < <(grep -rhoE '(href|src)="/[^"#]*"' "$DIST" --include='*.html' \
 [ "$broken" -eq 0 ] || die "发现 $broken 条站内断链，已中止发布"
 ok "站内引用（href + src）无断链"
 
-# 双语硬依赖：每个页面都必须真的引入 i18n.js，否则切换按钮点了没反应。
-# 用 lang-btn 而不是 class="lang" 作为探针：后者是精确串匹配，容器一旦
-# 变成 class="lang xxx" 就会静默失配，检查悄悄变成死代码。
-# lang-btn 是 i18n.js 直接依赖的选择器 —— 它在，脚本就必须在。
+# 逐页检查两件事。用 -print0 / read -d '' 遍历：`for f in $(find …)` 会按空白
+# 切词，文件名一旦含空格就被拆成两半，两个片段都 grep 不到 —— 检查会静默跳过
+# 那个页面，而不是报错。这正是这些闸要防的那类「悄悄不生效」。
+#
+# 1) 双语硬依赖：页面有切换按钮就必须引入 i18n.js，否则点了没反应。
+#    探针用 lang-btn 而非 class="lang" —— 后者是精确串匹配，容器一旦变成
+#    class="lang xxx" 就会失配，检查悄悄退化成死代码。
+#    lang-btn 是 i18n.js 直接依赖的选择器：它在，脚本就必须在。
+#
+# 2) 首帧正确性：<html> 必须静态带 data-lang="en"。按语言分支的 CSS
+#    （:root[data-lang="en"] …）挂在这个属性上。少了它，首帧退回基础样式，
+#    等 i18n.js 跑完才跳成英文样式 —— 布局抖一下，且英文 hero 会溢出首屏。
+#    i18n.js 自己也会设这个属性，但那太晚了。
 missing_i18n=0
-for f in $(find "$DIST" -name '*.html'); do
+missing_lang=0
+while IFS= read -r -d '' f; do
+  # 两个坑都是 macOS 自带的 bash 3.2（2007 年）踩出来的：
+  #   1. 不认 ${f#"$DIST"} 这种嵌套引号 —— $DIST 固定是 "site"，无通配符，直接展开安全
+  #   2. 变量名解析不是多字节感知的：写 "$rel（…" 会把全角括号的字节吃进变量名，
+  #      于是 set -u 报 rel? unbound。必须写成 ${rel} 来界定边界。
+  rel="${f#$DIST}"
   if grep -q 'lang-btn' "$f" && ! grep -q 'assets/i18n.js' "$f"; then
-    echo "  ${RED}缺 i18n.js${OFF} ${f#$DIST}（有切换按钮却没引入脚本）"
+    echo "  ${RED}缺 i18n.js${OFF} ${rel}（有切换按钮却没引入脚本）"
     missing_i18n=$((missing_i18n + 1))
   fi
-done
-[ "$missing_i18n" -eq 0 ] || die "发现 $missing_i18n 个页面的语言切换会失效，已中止发布"
-ok "双语脚本引入完整"
-
-# 首帧正确性：<html> 必须静态带 data-lang="en"。
-# 按语言分支的 CSS（:root[data-lang="en"] …）挂在这个属性上。少了它，
-# 首帧会退回基础样式，等 i18n.js 跑完才跳成英文样式 —— 布局抖一下，
-# 而且英文 hero 会在首帧溢出首屏。i18n.js 自己也会设这个属性，但那太晚了。
-missing_lang=0
-for f in $(find "$DIST" -name '*.html'); do
   if ! grep -qE '<html[^>]*data-lang="en"' "$f"; then
-    echo "  ${RED}缺 data-lang${OFF} ${f#$DIST}（首帧样式会错，随后抖动）"
+    echo "  ${RED}缺 data-lang${OFF} ${rel}（首帧样式会错，随后抖动）"
     missing_lang=$((missing_lang + 1))
   fi
-done
+done < <(find "$DIST" -name '*.html' -print0)
+
+[ "$missing_i18n" -eq 0 ] || die "发现 $missing_i18n 个页面的语言切换会失效，已中止发布"
+ok "双语脚本引入完整"
 [ "$missing_lang" -eq 0 ] || die "发现 $missing_lang 个页面首帧样式会错，已中止发布"
 ok "首帧语言属性完整"
 
 # 资源体积提醒（Pages 单文件上限 25MB）
-big=$(find "$DIST" -type f -size +20M | head -1)
+big=""
+while IFS= read -r -d '' f; do big="$f"; break; done < <(find "$DIST" -type f -size +20M -print0)
 [ -z "$big" ] || die "文件过大，超出 Cloudflare Pages 限制：$big"
 ok "资源体积正常（$(du -sh "$DIST" | cut -f1)）"
 
