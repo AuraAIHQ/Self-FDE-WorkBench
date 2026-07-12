@@ -1,0 +1,10 @@
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  X-Frame-Options: SAMEORIGIN
+
+/assets/*
+  Cache-Control: public, max-age=3600, must-revalidate
+
+/assets/sketch.jpg
+  Cache-Control: public, max-age=604800, immutable

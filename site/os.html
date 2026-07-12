@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>三个操作系统 — Sin90 / Cos72 / CityOS</title>
+<meta name="description" content="个体、中小组织、城市。三层服务对象，三个 Apache 2.0 开源系统。不是产品，是数字公共物品。">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230A0B0D'/%3E%3Ccircle cx='16' cy='16' r='6' fill='%23FF6B35'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+
+<nav class="top">
+  <div class="wrap">
+    <a class="brand" href="/"><span class="dot"></span>SELF-FDE / WORKBENCH</a>
+    <div class="nav-scroll">
+      <a class="link" href="/#thesis">主张</a>
+      <a class="link" href="/#map">全景图</a>
+      <a class="link" href="/roles/expresser.html">表达者</a>
+      <a class="link" href="/roles/innovator.html">创新者</a>
+      <a class="link" href="/roles/builder.html">建设者</a>
+      <a class="link" href="/os.html" aria-current="page">三个操作系统</a>
+      <a class="link" href="/vision.html">蓝图</a>
+      <a class="link" href="https://github.com/AuraAIHQ/Self-FDE-WorkBench">GitHub ↗</a>
+    </div>
+  </div>
+</nav>
+
+<main>
+<header class="hero" style="padding-bottom:56px">
+  <div class="wrap">
+    <div class="kicker rise d1">DIGITAL PUBLIC GOODS / <b>APACHE 2.0</b></div>
+    <h1 class="rise d2" style="max-width:16ch">三个<span class="glow">操作系统</span><br>三层服务对象</h1>
+    <p class="lede rise d3">
+      个体、中小组织、城市。<br>
+      它们<b>不是产品，是数字公共物品</b>——开源、免费、无许可，任何人都可以使用、修改和部署。
+    </p>
+  </div>
+</header>
+
+<!-- SIN90 -->
+<section id="sin90">
+  <div class="wrap">
+    <div class="sec-head io">
+      <div class="eyebrow">01 / 个体 · <span class="chip wip">设计中</span></div>
+      <h2 class="serif">Sin90 — 个体成长环</h2>
+      <p>每个人每天都在跑同一个环，只是内容不同。睁开眼看表、刷微信、刷小红书——甚至只是拉开窗帘看看天气，都是<strong>获取信息</strong>，那是你的第一步。</p>
+    </div>
+
+    <div class="diagram-frame io">
+      <svg viewBox="0 0 900 330" role="img" aria-label="Sin90 个体成长环">
+        <defs>
+          <marker id="s-ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="#7FDBCA"/>
+          </marker>
+          <marker id="ah-hot2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="#FF6B35"/>
+          </marker>
+        </defs>
+
+        <rect class="d-box d-box-cool" x="40" y="120" width="150" height="62" rx="2"/>
+        <text class="d-t d-t-cool" x="115" y="147" text-anchor="middle">Information</text>
+        <text class="d-t-s" x="115" y="167" text-anchor="middle" style="font-size:9.5px">信息</text>
+
+        <path class="d-arrow" d="M 194 151 L 234 151" stroke="#7FDBCA" marker-end="url(#s-ah)" opacity=".7"/>
+
+        <rect class="d-box d-box-cool" x="238" y="120" width="150" height="62" rx="2"/>
+        <text class="d-t d-t-cool" x="313" y="147" text-anchor="middle">Action</text>
+        <text class="d-t-s" x="313" y="167" text-anchor="middle" style="font-size:9.5px">行动</text>
+
+        <path class="d-arrow" d="M 392 151 L 432 151" stroke="#7FDBCA" marker-end="url(#s-ah)" opacity=".7"/>
+
+        <rect class="d-box d-box-cool" x="436" y="120" width="150" height="62" rx="2"/>
+        <text class="d-t d-t-cool" x="511" y="147" text-anchor="middle">Connection</text>
+        <text class="d-t-s" x="511" y="167" text-anchor="middle" style="font-size:9.5px">连接人 · 工具 · 世界</text>
+
+        <path class="d-arrow" d="M 590 151 L 630 151" stroke="#7FDBCA" marker-end="url(#s-ah)" opacity=".7"/>
+
+        <rect class="d-box d-box-cool" x="634" y="120" width="176" height="62" rx="2"/>
+        <text class="d-t d-t-cool" x="722" y="147" text-anchor="middle">Communication</text>
+        <text class="d-t-s" x="722" y="167" text-anchor="middle" style="font-size:9.5px">维系关系是为了沟通</text>
+
+        <!-- 回环 -->
+        <path class="d-arrow-hot" d="M 810 151 L 848 151 L 848 68 L 115 68 L 115 116" marker-end="url(#ah-hot2)" stroke="#FF6B35" fill="none"/>
+        <text class="d-t-s d-t-hot" x="480" y="56" text-anchor="middle">沟通是为了 —— 再一次获取信息。环，就这样闭合了。</text>
+
+        <text class="d-t-s" x="450" y="240" text-anchor="middle" style="font-size:12px;fill:#E8E4DC">生活 · 学习 · 社交 · 工作 —— 个人的成长，全部发生在这个环里</text>
+        <text class="d-label" x="40" y="296">SIN90 · 围绕成长环打造的个体操作系统 · APACHE 2.0</text>
+      </svg>
+    </div>
+
+    <div class="prose io" style="margin-top:44px">
+      <p>Sin90 的目标只有一个：围绕这个环，为普通个体的<strong>工作、生活、学习乃至创业</strong>提供助力和加持，得到一些数字生活的福祉。</p>
+    </div>
+  </div>
+</section>
+
+<!-- COS72 -->
+<section id="cos72">
+  <div class="wrap">
+    <div class="sec-head io">
+      <div class="eyebrow">02 / 社区 · 中小组织 · 商业组织 · <span class="chip live">进行中</span></div>
+      <h2 class="serif">Cos72 — 组织协作系统</h2>
+      <p>很多中小组织没有研发力量、没有技术人员，甚至雇不起一个 FDE。<strong>那能不能自己 FDE？</strong>把它拆散，通过协作去找到创新者和建设者，用 ANE 的方式，建设自己组织的 AI 能力。<strong>我觉得是可以的。</strong></p>
+    </div>
+
+    <div class="grid-3 io">
+      <div class="card">
+        <span class="idx">CORE 01</span>
+        <h3>知识库</h3>
+        <div class="sub">Knowledge Base</div>
+        <p>组织沉淀的知识，散落在数据库里、老员工的脑子里、客户的印象里。<strong>在 AI 时代，它必须被沉淀下来。</strong></p>
+      </div>
+      <div class="card">
+        <span class="idx">CORE 02</span>
+        <h3>组织工作流</h3>
+        <div class="sub">Organizational Workflow</div>
+        <p>使命、愿景、价值观、商业逻辑——它为什么存在？所有这些软性的东西，最终都要通过流程落地。公益组织和商业组织，一个道理。</p>
+      </div>
+      <div class="card">
+        <span class="idx">CORE 03</span>
+        <h3>组织大脑</h3>
+        <div class="sub">Organizational Brain</div>
+        <p><strong>大模型 API</strong>（OpenAI / Anthropic / DeepSeek⋯）<strong>+ 自训练 LoRA</strong>：用组织自身的大量数据做特定场景微调，让模型对这个组织了解得极其透彻。</p>
+      </div>
+    </div>
+
+    <div class="quote io">
+      <p>自训练 LoRA 是一个阶段性结论。这个结论未来可能被打破——但在今天，它让组织的流程效率提升得最多。</p>
+      <cite>— 关于组织大脑</cite>
+    </div>
+
+    <div class="prose io">
+      <h3>Connectors / Sensors（各类 Agent）</h3>
+      <p>组织的工作流和个体一样，需要大量的连接器与传感器。它们本质上就是各种 Agent：</p>
+      <ul>
+        <li>行业数据的抓取、分析与新闻判断</li>
+        <li>外部采购供应商之间的自动连接与报价</li>
+        <li>对客户的定期新品推送与售后服务</li>
+      </ul>
+      <p>这些 Agent 获取信息，并<strong>支撑</strong>你的组织工作流。</p>
+    </div>
+  </div>
+</section>
+
+<!-- CITYOS -->
+<section id="cityos">
+  <div class="wrap">
+    <div class="sec-head io">
+      <div class="eyebrow">03 / 城市 · <span class="chip">远期</span></div>
+      <h2 class="serif">CityOS — 城市成为智能体</h2>
+      <p>当每个组织都有了一个足够懂自己上下文的大脑，<strong>组织之间的共享，会涌现出新的协作模式</strong>，以及城市内的资源聚合。</p>
+    </div>
+
+    <div class="grid-3 io">
+      <div class="card">
+        <span class="idx">EMERGE 01</span>
+        <h3>组织间协作</h3>
+        <div class="sub">Inter-Org Collaboration</div>
+        <p>不需要全知全能，只需要对彼此的信息和上下文有足够了解。新的协作模式会自己长出来。</p>
+      </div>
+      <div class="card">
+        <span class="idx">EMERGE 02</span>
+        <h3>吸引资源</h3>
+        <div class="sub">Attract Resources</div>
+        <p>以城市为边界的协作，可以跨边界去吸引更多的外部资源。</p>
+      </div>
+      <div class="card">
+        <span class="idx">EMERGE 03</span>
+        <h3>吸纳人才</h3>
+        <div class="sub">Attract Talent</div>
+        <p>城市本身变成一个智能体，与所有人协作——而不是与所有人博弈。</p>
+      </div>
+    </div>
+
+    <div class="quote io">
+      <p>清迈是一座旅游城市。它如何在全球的旅游城市中吸引更多游客？我相信这是市长、市政府乃至全体市民都希望被解答的命题。CityOS 就是去解答它的。<br><br>这件事没有人尝试过。但<em>只有先行者，才享受得到数字福祉的红利。</em></p>
+      <cite>— 关于 CityOS</cite>
+    </div>
+
+    <div class="hero-actions io">
+      <a class="btn primary" href="https://github.com/AuraAIHQ/Self-FDE-WorkBench">参与建设 <span>→</span></a>
+      <a class="btn" href="/vision.html">读完整蓝图</a>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div>
+      <div style="color:var(--paper-dim);margin-bottom:6px">SELF-FDE WORKBENCH</div>
+      <div>AuraAI · Mycelium Protocol · Apache 2.0</div>
+    </div>
+    <div class="links">
+      <a href="/">首页</a>
+      <a href="/vision.html">蓝图</a>
+      <a href="/roles/builder.html">成为 ANE</a>
+      <a href="https://github.com/AuraAIHQ/Self-FDE-WorkBench">GitHub</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+  const io = new IntersectionObserver((es) => {
+    es.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } });
+  }, { threshold: 0.12, rootMargin: '0px 0px -8% 0px' });
+  document.querySelectorAll('.io').forEach((el, i) => {
+    el.style.transitionDelay = (i % 3) * 90 + 'ms';
+    io.observe(el);
+  });
+</script>
+</body>
+</html>

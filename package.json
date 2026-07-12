@@ -1,0 +1,12 @@
+{
+  "name": "self-fde-workbench",
+  "private": true,
+  "description": "Self-FDE WorkBench — 给 AI Native Engineer 的开源工作台",
+  "scripts": {
+    "dev": "wrangler pages dev site",
+    "deploy": "wrangler pages deploy site --project-name=self-fde-workbench"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}
