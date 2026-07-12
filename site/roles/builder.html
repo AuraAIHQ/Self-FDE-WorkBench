@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>建设者 Builder / ANE — Self-FDE WorkBench</title>
+<meta name="description" content="AI Native Engineer：不驻场，但在场。从 FDE 到 ANE 的工作循环与全流程支持。">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230A0B0D'/%3E%3Ccircle cx='16' cy='16' r='6' fill='%23FF6B35'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+
+<nav class="top">
+  <div class="wrap">
+    <a class="brand" href="/"><span class="dot"></span>SELF-FDE / WORKBENCH</a>
+    <div class="nav-scroll">
+      <a class="link" href="/#thesis">主张</a>
+      <a class="link" href="/#map">全景图</a>
+      <a class="link" href="/roles/expresser.html">表达者</a>
+      <a class="link" href="/roles/innovator.html">创新者</a>
+      <a class="link" href="/roles/builder.html" aria-current="page">建设者</a>
+      <a class="link" href="/os.html">三个操作系统</a>
+      <a class="link" href="/vision.html">蓝图</a>
+      <a class="link" href="https://github.com/AuraAIHQ/Self-FDE-WorkBench">GitHub ↗</a>
+    </div>
+  </div>
+</nav>
+
+<main>
+<header class="hero" style="padding-bottom:56px">
+  <div class="wrap">
+    <div class="kicker rise d1">ROLE 03 / <b>BUILDER = ANE</b></div>
+    <h1 class="rise d2" style="max-width:17ch">解决那些<span class="glow">小问题</span>——<br>它们是别人每天承受的痛苦</h1>
+    <p class="lede rise d3">
+      建设者站在创新者开辟的路上，用他们提供的更好的工具，去落地真实场景的细节分支。<br><br>
+      小红书上很多女生、文科生，什么技术都不懂，但因为对某个困境有极深的思考，就做出了很棒的产品。
+      哪怕带一部分模仿和学习，<b>完全没问题</b>——建设者要解决的，本来就是和普通人、普通组织息息相关的小问题。
+      <b>而这些「小问题」，对具体的人来说，可能是每天都在经受的痛苦。</b>
+    </p>
+  </div>
+</header>
+
+<!-- FDE → ANE -->
+<section>
+  <div class="wrap">
+    <div class="sec-head io">
+      <div class="eyebrow">定义</div>
+      <h2 class="serif">ANE — AI Native Engineer</h2>
+      <p>FDE 这个词是 Palantir 在 2010 年前后发明的，本质是把苦活脏活累活制度化：你必须进到客户现场和内部，才能准确识别真实的业务逻辑与流程，才能提炼、优化，先给方案，再抽象为产品。<br><br><strong>我们认为这个角色会长期存在——久到不该再叫 FDE。</strong></p>
+    </div>
+
+    <table class="spec io">
+      <thead><tr><th></th><th>FDE</th><th>ANE</th></tr></thead>
+      <tbody>
+        <tr><td>出处</td><td>Palantir，约 2010</td><td>本仓库提出</td></tr>
+        <tr><td>驻场</td><td><strong>必须</strong>驻场</td><td><strong>不必</strong>驻场，但必须在场</td></tr>
+        <tr><td>服务对象</td><td>大企业（付得起钱的）</td><td>个体 / 中小组织 / 城市</td></tr>
+        <tr><td>依托</td><td>公司内部方法论</td><td>开源 WorkBench + 数字公共物品</td></tr>
+        <tr><td>核心能力</td><td>业务理解 + 现场交付</td><td>业务理解 + AI 能力域调度 + 能力创新</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- 工作循环 -->
+<section>
+  <div class="wrap">
+    <div class="sec-head io">
+      <div class="eyebrow">方法</div>
+      <h2 class="serif">ANE 工作循环</h2>
+      <p>四步，加一个能力飞轮。每一步都可能反复回退——尤其是找痛点那一步。</p>
+    </div>
+
+    <div class="diagram-frame io">
+      <svg viewBox="0 0 1000 420" role="img" aria-label="ANE 工作循环">
+        <defs>
+          <marker id="b-ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="rgba(232,228,220,0.45)"/>
+          </marker>
+          <marker id="b-hot" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="#FF6B35"/>
+          </marker>
+        </defs>
+
+        <!-- 四步链条 -->
+        <rect class="d-box" x="40" y="80" width="180" height="70" rx="2"/>
+        <text class="d-t" x="130" y="112" text-anchor="middle">企业 / 组织场景</text>
+        <text class="d-t-s" x="130" y="132" text-anchor="middle" style="font-size:9.5px">真实的业务流程在这里</text>
+
+        <path class="d-arrow" d="M 224 115 L 268 115" marker-end="url(#b-ah)"/>
+        <text class="d-t-s" x="246" y="100" text-anchor="middle" style="font-size:9px">沟通</text>
+
+        <rect class="d-box d-box-hot" x="272" y="80" width="180" height="70" rx="2"/>
+        <text class="d-t d-t-hot" x="362" y="112" text-anchor="middle">痛点</text>
+        <text class="d-t-s" x="362" y="132" text-anchor="middle" style="font-size:9.5px">反复沟通才找得到真卡点</text>
+
+        <path class="d-arrow" d="M 456 115 L 500 115" marker-end="url(#b-ah)"/>
+        <text class="d-t-s" x="478" y="100" text-anchor="middle" style="font-size:9px">结合工作流</text>
+
+        <rect class="d-box" x="504" y="80" width="180" height="70" rx="2"/>
+        <text class="d-t" x="594" y="112" text-anchor="middle">解决方案</text>
+        <text class="d-t-s" x="594" y="132" text-anchor="middle" style="font-size:9.5px">持续迭代优化</text>
+
+        <path class="d-arrow" d="M 688 115 L 732 115" marker-end="url(#b-ah)"/>
+        <text class="d-t-s" x="710" y="100" text-anchor="middle" style="font-size:9px">通用化</text>
+
+        <rect class="d-box d-box-hot" x="736" y="80" width="180" height="70" rx="2"/>
+        <text class="d-t d-t-hot" x="826" y="120" text-anchor="middle">抽象为产品</text>
+
+        <!-- 客户参与（回退箭头） -->
+        <path class="d-arrow d-arrow-dash" d="M 362 76 L 362 46 L 130 46 L 130 76" marker-end="url(#b-ah)"/>
+        <text class="d-t-s" x="246" y="38" text-anchor="middle" style="font-size:9.5px">客户必须深度参与 · 痛点常常要回头再找</text>
+
+        <!-- 能力飞轮 -->
+        <rect class="d-box" x="494" y="240" width="200" height="66" rx="2"/>
+        <text class="d-t" x="594" y="268" text-anchor="middle" style="font-size:12px">已有 AI 能力</text>
+        <text class="d-t-s" x="594" y="288" text-anchor="middle" style="font-size:9.5px">架构 · 能力域 · 能力边界</text>
+
+        <rect class="d-box d-box-hot" x="726" y="240" width="200" height="66" rx="2"/>
+        <text class="d-t d-t-hot" x="826" y="264" text-anchor="middle" style="font-size:12px">新增 / 创新能力</text>
+        <text class="d-t-s" x="826" y="283" text-anchor="middle" style="font-size:9.5px">二次包装 · 多能力组合</text>
+        <text class="d-t-s" x="826" y="298" text-anchor="middle" style="font-size:9.5px">引入新资源维度</text>
+
+        <path class="d-arrow" d="M 594 236 L 594 158" marker-end="url(#b-ah)"/>
+        <text class="d-t-s" x="606" y="202" style="font-size:9px">调度已有能力</text>
+        <path class="d-arrow-hot" d="M 826 236 L 826 158" marker-end="url(#b-hot)"/>
+        <text class="d-t-s d-t-hot" x="838" y="202" style="font-size:9px">补上缺的能力</text>
+
+        <!-- 产品 → 反哺能力库 -->
+        <path class="d-arrow-hot d-arrow-dash" d="M 916 130 L 956 130 L 956 366 L 594 366 L 594 312" marker-end="url(#b-hot)"/>
+        <text class="d-t-s d-t-hot" x="775" y="358" text-anchor="middle">产品沉淀进能力库</text>
+
+        <text class="d-label" x="40" y="404">ANE WORK LOOP · 抽象出的产品会扩充能力库，下一次交付更快 —— 这是 ANE 的飞轮</text>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<!-- 全流程支持 -->
+<section>
+  <div class="wrap">
+    <div class="sec-head io">
+      <div class="eyebrow">WorkBench 提供</div>
+      <h2 class="serif">全流程支持</h2>
+      <p>不是课程，是工作台。你在真实场景里会卡在哪，我们就在哪。</p>
+    </div>
+
+    <div class="grid-2 io">
+      <div class="card">
+        <span class="idx">TRACK 01</span>
+        <h3>AI Native 选型</h3>
+        <div class="sub">Model & Architecture</div>
+        <p>什么场景该用什么模型？闭源 API 还是开源自部署？能力边界在哪里，什么时候不该用 AI——这往往比「怎么用」更值钱。</p>
+      </div>
+      <div class="card">
+        <span class="idx">TRACK 02</span>
+        <h3>训练自己的小模型</h3>
+        <div class="sub">LoRA / Fine-tuning</div>
+        <p>用组织自身的数据做特定场景微调，让模型对这个组织了解得极其透彻。<strong>这是一个阶段性结论，未来可能被打破</strong>——但现在，它有效。</p>
+      </div>
+      <div class="card">
+        <span class="idx">TRACK 03</span>
+        <h3>Memory 与 Context</h3>
+        <div class="sub">Context Engineering</div>
+        <p>Memory 在 Context 管理里究竟该如何实践和落地？有哪些可选的技术方案？各自的代价是什么？</p>
+      </div>
+      <div class="card">
+        <span class="idx">TRACK 04</span>
+        <h3>Agent 与 Connector</h3>
+        <div class="sub">Agents in Production</div>
+        <p>行业数据抓取、供应商自动连接与报价、客户新品推送与售后——把 Agent 接进组织的真实工作流，而不是做 Demo。</p>
+      </div>
+    </div>
+
+    <div class="quote io">
+      <p>AuraAI 作为聚合 ANE 的组织，持续沉淀、交流、积累，从而帮助更多的人成为表达者、创新者和建设者。</p>
+      <cite>— 这个仓库的使命</cite>
+    </div>
+
+    <div class="hero-actions io">
+      <a class="btn primary" href="https://github.com/AuraAIHQ/Self-FDE-WorkBench">进入仓库 <span>→</span></a>
+      <a class="btn" href="/os.html">看三个操作系统</a>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div>
+      <div style="color:var(--paper-dim);margin-bottom:6px">SELF-FDE WORKBENCH</div>
+      <div>AuraAI · Mycelium Protocol · Apache 2.0</div>
+    </div>
+    <div class="links">
+      <a href="/">首页</a>
+      <a href="/vision.html">蓝图</a>
+      <a href="/os.html">操作系统</a>
+      <a href="https://github.com/AuraAIHQ/Self-FDE-WorkBench">GitHub</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+  const io = new IntersectionObserver((es) => {
+    es.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } });
+  }, { threshold: 0.12, rootMargin: '0px 0px -8% 0px' });
+  document.querySelectorAll('.io').forEach((el, i) => {
+    el.style.transitionDelay = (i % 3) * 90 + 'ms';
+    io.observe(el);
+  });
+</script>
+</body>
+</html>
