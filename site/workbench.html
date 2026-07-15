@@ -28,6 +28,12 @@
   .shot .bar i{width:10px;height:10px;border-radius:50%;background:#3a3f47;display:inline-block}
   .shot img{display:block;width:100%;height:auto}
   @media(max-width:820px){.tool,.tool.flip{grid-template-columns:1fr;gap:22px}.tool.flip .shot{order:0}}
+  .hero-art.annot{position:relative;overflow:visible}
+  .hero-art.annot .cap{position:absolute;font-family:var(--mono);font-size:10px;line-height:1.35;color:#141414;background:var(--signal);padding:3px 8px;border-radius:6px;max-width:150px;box-shadow:0 5px 14px rgba(0,0,0,.4);z-index:4}
+  .hero-art.annot .cap b{font-weight:600}
+  .hero-art.annot .cap.l{left:-14px}
+  .hero-art.annot .cap.r{right:-14px;text-align:right}
+  @media(max-width:680px){.hero-art.annot .cap{display:none}}
 </style>
 </head>
 <body>
@@ -65,8 +71,12 @@
       Workbench-v0.1 and how its tools chain up.
     </p>
     </div><!-- /hero-copy -->
-    <div class="hero-art rise d3">
+    <div class="hero-art annot rise d3">
       <img src="/assets/illustrations/hero-climb.png" alt="小J 用工具套装攀登雪山：冰镐、绳索、锁扣、背包，橙色箭头标注装备" width="900" height="1080">
+      <div class="cap l" style="top:28%" data-zh="背包 = <b>capability-packs</b> · 随身原子能力">Pack = <b>capability-packs</b> · abilities you carry</div>
+      <div class="cap l" style="top:64%" data-zh="冰镐 = <b>fde-copilot</b> · 凿出规格">Ice axe = <b>fde-copilot</b> · carves the spec</div>
+      <div class="cap r" style="top:48%" data-zh="绳索 = <b>loop-engineer</b> · 一段段把你拉上去">Rope = <b>loop-engineer</b> · hauls you up</div>
+      <div class="cap r" style="top:8%" data-zh="登顶 = <b>你的 AI Native 套装</b>">Summit = <b>your suite</b></div>
     </div>
     </div><!-- /hero-inner -->
   </div>
