@@ -10,11 +10,17 @@
 
 | 角色 | 默认供应商 | 认证 |
 |---|---|---|
-| planner / 指挥仲裁 | Claude（你的订阅） | `claude login`，零 key |
+| planner / 指挥仲裁 / 失败回流 | Claude（你的订阅） | `claude login`，零 key |
 | coder | GLM-5.2 (`api.z.ai/api/anthropic`) | `GLM_API_KEY` |
-| reviewer（跨模型审） | Kimi (`api.moonshot.ai/anthropic`) | `KIMI_API_KEY` |
+| 内层 reviewer（跨模型审） | Kimi (`api.moonshot.ai/anthropic`) | `KIMI_API_KEY` |
+| 外层 reviewer（可选，第二意见） | DeepSeek (`api.deepseek.com/anthropic`) | `DEEPSEEK_API_KEY` |
 
 指挥大师跑在订阅上不花钱，干活的用便宜 API key，跨模型审避免"自己审自己看不出错"。
+任务可用 `coderProvider` / `reviewerProvider` 覆盖为不同模型（per-task 路由，难任务派更强的）。
+
+**两层评审**：内层（Kimi，快、便宜、PR 前本地挡明显错）+ 可选外层（DeepSeek，独立第二意见），双过才 merge。外层是接入完整 [PR-Daemon](../../PR-Daemon) 多轮 PK review 的接缝——见 [PLAN.md](./PLAN.md) 的 PR-Daemon 集成方案。
+
+**失败回流**：任务反复失败且判定为规格缺口时，自动把技术失败翻译成面向客户的澄清问题，回写规格目录的 `GAPS.md`（与 fde-copilot 同一份台账），闭合"实现受阻 → 反问客户 → 补规格 → 再实现"的飞轮。
 
 ## 一个任务的闭环
 
@@ -81,6 +87,7 @@ pnpm run status         # 看进度
 | `watchDirs` | 轮询哪些目录找 `loop.json` |
 | `pollIntervalMs` | 轮询间隔 |
 | `maxAttempts` | 单任务返工上限（back-pressure） |
-| `providers.{planner,coder,reviewer}` | 各角色供应商（`claude`/`glm`/`kimi`/`mock`） |
+| `providers.{planner,coder,reviewer}` | 各角色供应商（`claude`/`glm`/`kimi`/`deepseek`/`mock`） |
+| `providers.outerReviewer` | 可选外层 reviewer（如 `deepseek`）；内层过后再独立审一遍 |
 
 设计细节见 [ARCHITECTURE.md](./ARCHITECTURE.md)，规划与调研见 [PLAN.md](./PLAN.md)。

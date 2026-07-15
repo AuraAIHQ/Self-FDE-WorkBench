@@ -34,6 +34,7 @@ export async function loadConfig(): Promise<Config> {
   if (process.env.LOOP_PLANNER) cfg.providers.planner = process.env.LOOP_PLANNER;
   if (process.env.LOOP_CODER) cfg.providers.coder = process.env.LOOP_CODER;
   if (process.env.LOOP_REVIEWER) cfg.providers.reviewer = process.env.LOOP_REVIEWER;
+  if (process.env.LOOP_OUTER_REVIEWER) cfg.providers.outerReviewer = process.env.LOOP_OUTER_REVIEWER;
   return cfg;
 }
 
@@ -73,10 +74,13 @@ export function resolveProvider(name: string): ResolvedProvider {
     ANTHROPIC_AUTH_TOKEN: key,
   };
   if (model) {
-    // 覆盖主模型与小/快模型，避免后台调用回落到 Anthropic
+    // 覆盖所有模型 slot，避免 claude 内部选 opus/sonnet/haiku 时回落到 Anthropic
     env.ANTHROPIC_MODEL = model;
-    env.ANTHROPIC_DEFAULT_HAIKU_MODEL = model;
-    env.ANTHROPIC_SMALL_FAST_MODEL = model;
+    env.ANTHROPIC_DEFAULT_OPUS_MODEL = model;
+    env.ANTHROPIC_DEFAULT_SONNET_MODEL = model;
+    const haiku = process.env[`${upper}_HAIKU_MODEL`] || model;
+    env.ANTHROPIC_DEFAULT_HAIKU_MODEL = haiku;
+    env.ANTHROPIC_SMALL_FAST_MODEL = haiku;
   }
   return { name: n, env, model, isMock: false };
 }

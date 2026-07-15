@@ -28,6 +28,9 @@ export const Task = z.object({
   branch: z.string().optional(),
   /** 最近一次结果摘要 */
   lastResult: z.string().optional(),
+  /** per-task 模型路由：难任务可覆盖 coder/reviewer 供应商（不填用全局默认） */
+  coderProvider: z.string().optional(),
+  reviewerProvider: z.string().optional(),
 });
 export type Task = z.infer<typeof Task>;
 
@@ -64,6 +67,8 @@ export const Config = z.object({
       planner: z.string().default("claude"),
       coder: z.string().default("glm"),
       reviewer: z.string().default("kimi"),
+      /** 可选外层 reviewer（如 deepseek）：内层过后再独立审一遍，双过才 merge */
+      outerReviewer: z.string().optional(),
     })
     .default({ planner: "claude", coder: "glm", reviewer: "kimi" }),
 });

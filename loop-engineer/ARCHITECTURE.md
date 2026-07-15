@@ -8,6 +8,7 @@ cli.ts ──────────── plan / run[--once|--drain] / status
   ├─ config.ts ····· 读 loop-engineer.config.json + .env；LOOP_* 覆盖；resolveProvider()
   ├─ jobs.ts ······· scanJobs(watchDirs) 找 loop.json；nextTask(依赖就绪) ；saveJob；journal
   ├─ planner.ts ···· 规格 → 任务队列（planner 供应商，写 loop.json）
+  ├─ feedback.ts ··· v0.2 失败回流：技术失败 → 面向客户的澄清问题 → 回写 GAPS.md
   └─ orchestrator.ts ─ runTask() 单任务闭环
         ├─ providers.ts ── runAgent(prompt, provider)：spawn `claude -p` + env 覆盖 / mock
         ├─ git.ts ──────── worktree（含专用集成 worktree）/ 分支 / 合并 / PR
@@ -37,19 +38,22 @@ cli.ts ──────────── plan / run[--once|--drain] / status
 
 ```
 todo → in_progress
+  coder/reviewer 供应商 = task 覆盖 ?? 全局默认（per-task 路由）
   loop attempt 1..maxAttempts:
      coder 编码 → commitAll(任务分支)
      runGate：install + commands 顺序跑
         fail → feedback=失败日志 → 下一轮返工
-     reviewer 跨模型审 → extractJson 裁决
-        !approved → feedback=blocking → 下一轮返工
-        approved → 成功，break
+     评审面板 [内层 reviewer, (可选)外层 reviewer]：逐个审
+        任一 !approved → feedback=blocking → 下一轮返工
+        全 approved → 成功，break
   成功 → openPr(尽力) → mergeToIntegration(--no-ff) → done
   失败 → attempts 到顶 = failed，否则 blocked（不合并）
+         → reportBlocked()：判 spec_gap 则回写 GAPS.md 抛问题给客户
 finally → 删任务 worktree + saveJob + journal
 ```
 
 `nextTask` 只挑 `dependsOn` 全 `done` 的 `todo` 任务；`run` 每轮只跑一个任务再重扫（串行，v0 决策）。
+评审面板双过才 merge——内层便宜快审、外层（DeepSeek）独立第二意见，是接入 PR-Daemon 多轮 review 的接缝。
 
 ## 安全与 back-pressure
 

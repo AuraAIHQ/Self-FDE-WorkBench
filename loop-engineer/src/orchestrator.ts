@@ -16,6 +16,7 @@ import {
 } from "./git.js";
 import { runGate } from "./gate.js";
 import { saveJob, appendJournal } from "./jobs.js";
+import { reportBlocked } from "./feedback.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROMPTS = path.resolve(__dirname, "..", "prompts");
@@ -71,15 +72,25 @@ export interface RunTaskResult {
 export async function runTask(job: LoadedJob, task: Task, config: Config): Promise<RunTaskResult> {
   const repo = job.repoPath;
   const integration = job.manifest.integrationBranch;
-  const coder = resolveProvider(config.providers.coder);
-  const reviewer = resolveProvider(config.providers.reviewer);
+  // per-task 模型路由：任务可覆盖全局默认（难任务派更强的模型）
+  const coder = resolveProvider(task.coderProvider ?? config.providers.coder);
+  const innerReviewer = resolveProvider(task.reviewerProvider ?? config.providers.reviewer);
+  // 评审面板：内层（快、便宜）+ 可选外层（如 deepseek，独立第二意见），双过才 merge
+  const reviewers = [{ tag: "内层", provider: innerReviewer }];
+  if (config.providers.outerReviewer) {
+    reviewers.push({ tag: "外层", provider: resolveProvider(config.providers.outerReviewer) });
+  }
 
   const integrationWt = await ensureIntegrationWorktree(repo, job.manifest.baseBranch, integration);
   const branch = `loop/${job.manifest.id}/${task.id}`;
   task.branch = branch;
 
   log.step(`任务 ${task.id} · ${task.title}`);
-  await appendJournal(job, task.id, `开始（coder=${coder.name} reviewer=${reviewer.name}）`);
+  await appendJournal(
+    job,
+    task.id,
+    `开始（coder=${coder.name} reviewers=${reviewers.map((r) => r.provider.name).join("+")}）`,
+  );
 
   const wt = await createTaskWorktree(repo, integration, branch);
   const tb = taskBlock(task, integration);
@@ -125,34 +136,41 @@ export async function runTask(job: LoadedJob, task: Task, config: Config): Promi
         continue;
       }
 
-      // 跨模型 review
-      log.info(`  跨模型评审（${reviewer.name}）`);
+      // 跨模型评审面板（内层 + 可选外层），任一打回即返工
       const reviewPrompt = reviewerTpl.replace("{{TASK_BLOCK}}", tb);
-      const rev = await runAgent(reviewPrompt, {
-        cwd: wt,
-        provider: reviewer,
-        allowedTools: ["Read", "Grep", "Glob", "Bash"],
-        mockHandler: reviewer.isMock ? mockReviewer(task) : undefined,
-      });
-      const verdict = extractJson<ReviewVerdict>(rev.text);
+      let panelPassed = true;
+      for (const r of reviewers) {
+        log.info(`  ${r.tag}评审（${r.provider.name}）`);
+        const rev = await runAgent(reviewPrompt, {
+          cwd: wt,
+          provider: r.provider,
+          allowedTools: ["Read", "Grep", "Glob", "Bash"],
+          mockHandler: r.provider.isMock ? mockReviewer(task) : undefined,
+        });
+        const verdict = extractJson<ReviewVerdict>(rev.text);
 
-      if (!verdict) {
-        feedback = "评审未返回可解析的裁决，请确保改动清晰。";
-        lastDetail = "评审输出无法解析";
-        log.warn(`  ${lastDetail} → 返工`);
-        continue;
+        if (!verdict) {
+          feedback = `${r.tag}评审未返回可解析的裁决，请确保改动清晰。`;
+          lastDetail = `${r.tag}评审输出无法解析`;
+          log.warn(`  ${lastDetail} → 返工`);
+          panelPassed = false;
+          break;
+        }
+        if (!verdict.approved) {
+          feedback = `${r.tag}评审打回（score ${verdict.score}）：\n${verdict.blocking.map((b) => `- ${b}`).join("\n")}`;
+          lastDetail = `${r.tag}评审打回：${verdict.summary}`;
+          log.warn(`  ${lastDetail} → 返工`);
+          await appendJournal(job, task.id, `✗ ${r.tag}评审打回：${verdict.summary}`);
+          panelPassed = false;
+          break;
+        }
+        log.ok(`  ${r.tag}评审通过（score ${verdict.score}）`);
       }
-      if (!verdict.approved) {
-        feedback = `评审打回（score ${verdict.score}）：\n${verdict.blocking.map((b) => `- ${b}`).join("\n")}`;
-        lastDetail = `评审打回：${verdict.summary}`;
-        log.warn(`  ${lastDetail} → 返工`);
-        await appendJournal(job, task.id, `✗ 评审打回：${verdict.summary}`);
-        continue;
-      }
+      if (!panelPassed) continue;
 
-      // 通过
+      // 全部评审通过
       success = true;
-      lastDetail = `通过（评审 score ${verdict.score}）`;
+      lastDetail = `通过（${reviewers.length} 层评审）`;
       log.ok(`  ${lastDetail}`);
       break;
     }
@@ -175,6 +193,12 @@ export async function runTask(job: LoadedJob, task: Task, config: Config): Promi
       task.lastResult = lastDetail;
       log.err(`  任务未通过：${lastDetail}`);
       await appendJournal(job, task.id, `✗ 收工未通过：${lastDetail}`);
+      // v0.2 失败回流：把技术失败翻译成面向客户的澄清问题，回写规格目录 GAPS.md
+      try {
+        await reportBlocked(job, task, `${lastDetail}\n\n${feedback}`, config);
+      } catch (e) {
+        log.warn(`  回流失败：${(e as Error).message}`);
+      }
     }
   } finally {
     await removeWorktree(repo, wt);
