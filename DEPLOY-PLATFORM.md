@@ -1,4 +1,7 @@
-# 部署 · Self-FDE-WorkBench
+# 部署（一）· 部署 WorkBench 平台本身
+
+> **本文 = 把 WorkBench 平台（三个应用）架起来**，给运营方 / 自持者。
+> 用户**造好的专属工具**怎么部署与跑，见 [DEPLOY-TOOL.md](./DEPLOY-TOOL.md)。经济/计价见 [ECONOMIC_MODEL.md](./ECONOMIC_MODEL.md)。
 
 > 本套（fde-copilot / loop-engineer / capability-packs）含 **Claude Code 本地 agent + 本地 FLUX 生图**，
 > 不能跑云端 serverless。标准形态：**一台常驻 Mac Mini 跑全部，Cloudflare Tunnel 映射到互联网。**
