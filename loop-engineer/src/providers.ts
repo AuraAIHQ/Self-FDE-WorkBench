@@ -80,7 +80,7 @@ export async function runAgent(prompt: string, opts: RunAgentOpts): Promise<RunA
         reject(new Error(`供应商 ${provider.name} 退出码 ${code}：${stderr.slice(0, 500)}`));
         return;
       }
-      resolve({ text: extractResult(stdout), provider: provider.name, usage: extractUsage(stdout) });
+      resolve({ text: extractResult(stdout), provider: provider.name, usage: extractUsage(stdout, provider) });
     });
   });
   await recordUsage(result.provider, result.usage, new Date().toISOString());
@@ -88,18 +88,26 @@ export async function runAgent(prompt: string, opts: RunAgentOpts): Promise<RunA
 }
 
 /** 从 `claude -p --output-format json` 的输出里取 usage/成本/墙钟 */
-function extractUsage(stdout: string): Usage {
+function extractUsage(stdout: string, provider: ResolvedProvider): Usage {
   try {
     const obj = JSON.parse(stdout.trim()) as {
       usage?: { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number };
       total_cost_usd?: number;
       duration_ms?: number;
     };
+    const inTok = obj.usage?.input_tokens ?? 0;
+    const outTok = obj.usage?.output_tokens ?? 0;
+    // 只有真正的 Anthropic(claude 订阅)才信 total_cost_usd；GLM/Kimi/DeepSeek 直连时
+    // claude -p 按 Anthropic 价折算会大幅高估，改用本地价表按其自身 token 估。
+    const costUsd =
+      provider.name === "claude"
+        ? obj.total_cost_usd ?? 0
+        : estimateCost(provider.model, inTok, outTok);
     return {
-      inputTokens: obj.usage?.input_tokens ?? 0,
-      outputTokens: obj.usage?.output_tokens ?? 0,
+      inputTokens: inTok,
+      outputTokens: outTok,
       cacheReadTokens: obj.usage?.cache_read_input_tokens ?? 0,
-      costUsd: obj.total_cost_usd ?? 0,
+      costUsd,
       computeMs: obj.duration_ms ?? 0,
       calls: 1,
     };
