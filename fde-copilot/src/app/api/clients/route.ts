@@ -15,12 +15,12 @@ export async function POST(req: Request) {
   const denied = authError(req);
   if (denied) return denied;
   try {
-    const { name } = (await req.json()) as { name?: string };
+    const { name, background } = (await req.json()) as { name?: string; background?: string };
     if (!name || !name.trim()) {
       return NextResponse.json({ error: "缺少客户名称" }, { status: 400 });
     }
-    const state = await createClient(name.trim());
-    return NextResponse.json({ client: state }, { status: 201 });
+    const client = await createClient(name.trim(), background ?? "");
+    return NextResponse.json({ client }, { status: 201 });
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 400 });
   }
