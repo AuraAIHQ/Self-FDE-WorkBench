@@ -3,11 +3,27 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { log } from "./log.js";
 import { resolveProvider } from "./config.js";
-import { runAgent, extractJson } from "./providers.js";
+import { runAgent, runChat, extractJson } from "./providers.js";
 import { JobManifest } from "./types.js";
 import type { Config } from "./types.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+const SPEC_FILES = ["SPEC.md", "PRODUCT.md", "FEATURES.md", "TECH_SPEC.md", "INTERACTIONS.md", "GAPS.md"];
+
+/** 读规格目录里的文档，拼成一段（供无工具的 chat 供应商） */
+async function readSpecDocs(dir: string): Promise<string> {
+  const parts: string[] = [];
+  for (const f of SPEC_FILES) {
+    try {
+      const c = await fs.readFile(path.join(dir, f), "utf8");
+      parts.push(`### ${f}\n${c}`);
+    } catch {
+      /* 缺文件跳过 */
+    }
+  }
+  return parts.join("\n\n---\n\n") || "（规格目录为空）";
+}
 
 interface PlanOut {
   tasks: Array<{
@@ -34,14 +50,21 @@ export async function planSpec(
   const tpl = await fs.readFile(path.join(__dirname, "..", "prompts", "planner.md"), "utf8");
 
   log.step(`拆解规格 ${specDir}（planner=${planner.name}）`);
-  const res = await runAgent(tpl, {
-    cwd: specDir,
-    provider: planner,
-    allowedTools: ["Read", "Grep", "Glob"],
-    mockHandler: planner.isMock
-      ? async () => JSON.stringify({ tasks: [], skipped: "mock" } satisfies PlanOut)
-      : undefined,
-  });
+  let res;
+  if (planner.kind === "openai-chat") {
+    // 单发 chat：无 Read 工具，自己把规格文档拼进去
+    const docs = await readSpecDocs(specDir);
+    res = await runChat(tpl, `## 规格文档\n\n${docs}`, { provider: planner, maxTokens: 8000 });
+  } else {
+    res = await runAgent(tpl, {
+      cwd: specDir,
+      provider: planner,
+      allowedTools: ["Read", "Grep", "Glob"],
+      mockHandler: planner.isMock
+        ? async () => JSON.stringify({ tasks: [], skipped: "mock" } satisfies PlanOut)
+        : undefined,
+    });
+  }
 
   const plan = extractJson<PlanOut>(res.text);
   if (!plan || !Array.isArray(plan.tasks)) {

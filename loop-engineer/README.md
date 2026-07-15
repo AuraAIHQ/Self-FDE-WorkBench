@@ -18,6 +18,10 @@
 指挥大师跑在订阅上不花钱，干活的用便宜 API key，跨模型审避免"自己审自己看不出错"。
 任务可用 `coderProvider` / `reviewerProvider` 覆盖为不同模型（per-task 路由，难任务派更强的）。
 
+**供应商两类**：
+- `anthropic-agentic`（`claude`/`glm`/`kimi`/`deepseek`）—— 起 `claude -p`，有文件/命令工具，**agentic coder 必须用这类**。
+- `openai-chat`（`hilinkup:<model>`）—— OpenAI 兼容网关单发调用，**一个 key 调 GLM/Kimi/DeepSeek/Qwen 等**，用于 reviewer/planner/回流（自动把 diff/规格喂进去）。如 `hilinkup:kimi-k2.7-code`、`hilinkup:deepseek-v4-pro`。HiLinkup 只有中国模型、无 Anthropic 端点，故**不能当 coder**（agentic 编码需 `claude -p` 或 codex）。
+
 **两层评审**：内层（Kimi，快、便宜、PR 前本地挡明显错）+ 可选外层（DeepSeek，独立第二意见），双过才 merge。外层是接入完整 [PR-Daemon](../../PR-Daemon) 多轮 PK review 的接缝——见 [PLAN.md](./PLAN.md) 的 PR-Daemon 集成方案。
 
 **失败回流**：任务反复失败且判定为规格缺口时，自动把技术失败翻译成面向客户的澄清问题，回写规格目录的 `GAPS.md`（与 fde-copilot 同一份台账），闭合"实现受阻 → 反问客户 → 补规格 → 再实现"的飞轮。

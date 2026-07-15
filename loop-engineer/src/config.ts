@@ -38,28 +38,45 @@ export async function loadConfig(): Promise<Config> {
   return cfg;
 }
 
+/** agentic = 起 `claude -p`（要 Anthropic 端点）；chat = 单发 OpenAI /chat/completions */
+export type ProviderKind = "anthropic-agentic" | "openai-chat" | "mock";
+
 export interface ResolvedProvider {
-  name: ProviderName;
-  /** 传给 claude CLI 子进程的 env 覆盖；claude=订阅无覆盖；mock=不 spawn */
+  name: string;
+  kind: ProviderKind;
+  /** anthropic-agentic：传给 claude CLI 的 env 覆盖 */
   env: Record<string, string>;
+  /** openai-chat：网关 base URL / key */
+  baseUrl?: string;
+  apiKey?: string;
   model?: string;
   isMock: boolean;
 }
 
 /**
- * 把逻辑供应商名解析成 claude CLI 的 env 覆盖。
- * - claude：本机订阅，无覆盖
- * - glm/kimi：Anthropic 兼容端点，覆盖 BASE_URL + AUTH_TOKEN + MODEL
- * - mock：本地模拟，不真调模型
+ * 解析供应商字符串成可执行配置：
+ * - `claude`：本机订阅，agentic，无 env 覆盖
+ * - `glm`/`kimi`/`deepseek`：Anthropic 兼容端点，agentic（覆盖 BASE_URL+AUTH_TOKEN+MODEL）
+ * - `hilinkup` / `hilinkup:<model>`：OpenAI 兼容网关，单发 chat（一 key 多模型）
+ * - `mock`：本地模拟
  */
 export function resolveProvider(name: string): ResolvedProvider {
+  if (name === "claude") {
+    return { name, kind: "anthropic-agentic", env: {}, isMock: false };
+  }
+  if (name === "mock") {
+    return { name, kind: "mock", env: {}, isMock: true };
+  }
+  // OpenAI 兼容网关：hilinkup 或 hilinkup:<model>
+  if (name === "hilinkup" || name.startsWith("hilinkup:")) {
+    const model = name.includes(":") ? name.slice(name.indexOf(":") + 1) : process.env.HILINKUP_MODEL;
+    const baseUrl = process.env.HILINKUP_BASE_URL || "https://hilinkup.com/v1";
+    const apiKey = process.env.HILINKUP_API_KEY;
+    if (!apiKey) throw new Error("hilinkup 缺少 HILINKUP_API_KEY（在 .env 配置）");
+    if (!model) throw new Error(`hilinkup 需指定模型，如 "hilinkup:glm-5.1"（或设 HILINKUP_MODEL）`);
+    return { name, kind: "openai-chat", env: {}, baseUrl, apiKey, model, isMock: false };
+  }
   const n = name as ProviderName;
-  if (n === "claude") {
-    return { name: n, env: {}, isMock: false };
-  }
-  if (n === "mock") {
-    return { name: n, env: {}, isMock: true };
-  }
   const upper = n.toUpperCase();
   const key = process.env[`${upper}_API_KEY`];
   const base = process.env[`${upper}_BASE_URL`];
@@ -82,5 +99,5 @@ export function resolveProvider(name: string): ResolvedProvider {
     env.ANTHROPIC_DEFAULT_HAIKU_MODEL = haiku;
     env.ANTHROPIC_SMALL_FAST_MODEL = haiku;
   }
-  return { name: n, env, model, isMock: false };
+  return { name: n, kind: "anthropic-agentic", env, model, isMock: false };
 }

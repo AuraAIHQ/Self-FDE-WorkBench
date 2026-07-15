@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { log } from "./log.js";
 import { resolveProvider } from "./config.js";
-import { runAgent, extractJson } from "./providers.js";
+import { runAgent, runChat, extractJson } from "./providers.js";
 import { appendJournal } from "./jobs.js";
 import type { Config, LoadedJob, Task } from "./types.js";
 
@@ -19,6 +19,19 @@ interface BlockedOut {
 
 async function fileExists(p: string): Promise<boolean> {
   return fs.access(p).then(() => true).catch(() => false);
+}
+
+/** 读若干规格文件拼成一段（供无工具的 chat 供应商） */
+async function readSome(dir: string, files: string[]): Promise<string> {
+  const parts: string[] = [];
+  for (const f of files) {
+    try {
+      parts.push(`### ${f}\n${await fs.readFile(path.join(dir, f), "utf8")}`);
+    } catch {
+      /* skip */
+    }
+  }
+  return parts.join("\n\n") || "（无）";
 }
 
 /**
@@ -49,22 +62,29 @@ export async function reportBlocked(
 
   let out: BlockedOut | null = null;
   try {
-    const res = await runAgent(prompt, {
-      cwd: job.jobDir,
-      provider: planner,
-      allowedTools: ["Read", "Grep", "Glob"],
-      mockHandler: planner.isMock
-        ? async () =>
-            JSON.stringify({
-              kind: "spec_gap",
-              question: `任务「${task.title}」实现受阻，请确认相关规格是否完整`,
-              why: failure.slice(0, 200),
-              hypotheses: [],
-              summary: "[mock] 回流",
-            } satisfies BlockedOut)
-        : undefined,
-    });
-    out = extractJson<BlockedOut>(res.text);
+    let text: string;
+    if (planner.kind === "openai-chat") {
+      const spec = await readSome(job.jobDir, ["SPEC.md", "FEATURES.md", "GAPS.md"]);
+      text = (await runChat(prompt, `## 相关规格\n\n${spec}`, { provider: planner })).text;
+    } else {
+      const res = await runAgent(prompt, {
+        cwd: job.jobDir,
+        provider: planner,
+        allowedTools: ["Read", "Grep", "Glob"],
+        mockHandler: planner.isMock
+          ? async () =>
+              JSON.stringify({
+                kind: "spec_gap",
+                question: `任务「${task.title}」实现受阻，请确认相关规格是否完整`,
+                why: failure.slice(0, 200),
+                hypotheses: [],
+                summary: "[mock] 回流",
+              } satisfies BlockedOut)
+          : undefined,
+      });
+      text = res.text;
+    }
+    out = extractJson<BlockedOut>(text);
   } catch (e) {
     log.warn(`回流生成失败，用兜底：${(e as Error).message}`);
   }

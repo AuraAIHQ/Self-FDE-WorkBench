@@ -92,6 +92,14 @@ export async function removeWorktree(repo: string, wtPath: string): Promise<void
   await tryGit(repo, ["worktree", "prune"]);
 }
 
+/** 任务分支相对集成分支的 diff（喂给单发 chat reviewer；容量上限保护） */
+export async function diffAgainst(wtPath: string, integrationBranch: string): Promise<string> {
+  const diff = (await tryGit(wtPath, ["diff", `${integrationBranch}...HEAD`])) ?? "";
+  const stat = (await tryGit(wtPath, ["diff", "--stat", `${integrationBranch}...HEAD`])) ?? "";
+  const capped = diff.length > 60_000 ? diff.slice(0, 60_000) + "\n…(diff 过长已截断)" : diff;
+  return `## 改动概览\n${stat}\n\n## 完整 diff\n${capped}`;
+}
+
 export async function hasChanges(wtPath: string): Promise<boolean> {
   const s = await tryGit(wtPath, ["status", "--porcelain"]);
   return !!s;

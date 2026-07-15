@@ -76,6 +76,49 @@ export async function runAgent(prompt: string, opts: RunAgentOpts): Promise<RunA
   });
 }
 
+/**
+ * OpenAI 兼容单发调用（HiLinkup 等网关）。无 agentic 工具——上下文（diff/规格）
+ * 由调用方拼进 messages。用于 reviewer/planner/回流 这类"喂上下文→出 JSON"的角色。
+ */
+export async function runChat(
+  system: string,
+  user: string,
+  opts: { provider: ResolvedProvider; maxTokens?: number; timeoutMs?: number },
+): Promise<RunAgentResult> {
+  const { provider } = opts;
+  if (!provider.baseUrl || !provider.apiKey || !provider.model) {
+    throw new Error(`runChat 需要 openai-chat 供应商（有 baseUrl/apiKey/model）：${provider.name}`);
+  }
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), opts.timeoutMs ?? 180_000);
+  try {
+    const res = await fetch(`${provider.baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${provider.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: provider.model,
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: user },
+        ],
+        max_tokens: opts.maxTokens ?? 4000,
+        // 不设 temperature：部分模型（如 kimi-k2.7-code）只接受默认值
+      }),
+      signal: ctrl.signal,
+    });
+    if (!res.ok) {
+      throw new Error(`${provider.name} HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
+    }
+    const j = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
+    return { text: j.choices?.[0]?.message?.content ?? "", provider: provider.name };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** 从 `claude -p --output-format json` 的输出里取最终文本 */
 function extractResult(stdout: string): string {
   const trimmed = stdout.trim();

@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { log } from "./log.js";
 import { resolveProvider } from "./config.js";
 import type { Config, LoadedJob, ReviewVerdict, Task } from "./types.js";
-import { runAgent, extractJson } from "./providers.js";
+import { runAgent, runChat, extractJson } from "./providers.js";
 import {
   ensureIntegrationWorktree,
   createTaskWorktree,
@@ -13,6 +13,7 @@ import {
   hasChanges,
   mergeToIntegration,
   openPr,
+  diffAgainst,
 } from "./git.js";
 import { runGate } from "./gate.js";
 import { saveJob, appendJournal } from "./jobs.js";
@@ -74,6 +75,14 @@ export async function runTask(job: LoadedJob, task: Task, config: Config): Promi
   const integration = job.manifest.integrationBranch;
   // per-task 模型路由：任务可覆盖全局默认（难任务派更强的模型）
   const coder = resolveProvider(task.coderProvider ?? config.providers.coder);
+  if (coder.kind === "openai-chat") {
+    // agentic 编码需 Anthropic 端点或 codex；OpenAI 网关（HiLinkup）不能直接驱动 claude -p
+    task.status = "failed";
+    task.lastResult = `coder 不能用 OpenAI 网关(${coder.name})：agentic 编码需 Anthropic 端点(claude/glm/kimi/deepseek 直连)或 codex`;
+    log.err(`  ${task.lastResult}`);
+    await saveJob(job);
+    return { ok: false, status: "failed", detail: task.lastResult };
+  }
   const innerReviewer = resolveProvider(task.reviewerProvider ?? config.providers.reviewer);
   // 评审面板：内层（快、便宜）+ 可选外层（如 deepseek，独立第二意见），双过才 merge
   const reviewers = [{ tag: "内层", provider: innerReviewer }];
@@ -141,13 +150,26 @@ export async function runTask(job: LoadedJob, task: Task, config: Config): Promi
       let panelPassed = true;
       for (const r of reviewers) {
         log.info(`  ${r.tag}评审（${r.provider.name}）`);
-        const rev = await runAgent(reviewPrompt, {
-          cwd: wt,
-          provider: r.provider,
-          allowedTools: ["Read", "Grep", "Glob", "Bash"],
-          mockHandler: r.provider.isMock ? mockReviewer(task) : undefined,
-        });
-        const verdict = extractJson<ReviewVerdict>(rev.text);
+        let revText: string;
+        if (r.provider.kind === "openai-chat") {
+          // 单发 chat：无工具，自己把 diff 拼进去
+          const diff = await diffAgainst(wt, integration);
+          revText = (
+            await runChat("你是严格、对抗性的代码评审员，只输出要求的 JSON。", `${reviewPrompt}\n\n${diff}`, {
+              provider: r.provider,
+            })
+          ).text;
+        } else {
+          revText = (
+            await runAgent(reviewPrompt, {
+              cwd: wt,
+              provider: r.provider,
+              allowedTools: ["Read", "Grep", "Glob", "Bash"],
+              mockHandler: r.provider.isMock ? mockReviewer(task) : undefined,
+            })
+          ).text;
+        }
+        const verdict = extractJson<ReviewVerdict>(revText);
 
         if (!verdict) {
           feedback = `${r.tag}评审未返回可解析的裁决，请确保改动清晰。`;
