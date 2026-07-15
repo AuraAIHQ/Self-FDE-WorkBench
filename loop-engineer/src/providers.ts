@@ -6,6 +6,8 @@ export interface RunAgentOpts {
   provider: ResolvedProvider;
   /** 限制工具（如 reviewer 只读）。不传则用默认全量 + skip-permissions */
   allowedTools?: string[];
+  /** 硬禁工具（deny 优先级高于 skip-permissions，用于把 reviewer 收成只读） */
+  disallowedTools?: string[];
   maxTurns?: number;
   timeoutMs?: number;
   /** provider.isMock 时用它替代真实调用 */
@@ -44,6 +46,10 @@ export async function runAgent(prompt: string, opts: RunAgentOpts): Promise<RunA
     "--max-turns",
     String(maxTurns),
   ];
+  if (opts.disallowedTools && opts.disallowedTools.length) {
+    // deny 优先于 skip-permissions，确保 reviewer 即便 skip 也无法写/跑命令
+    args.push("--disallowedTools", ...opts.disallowedTools);
+  }
   if (opts.allowedTools && opts.allowedTools.length) {
     args.push("--allowedTools", ...opts.allowedTools);
   }

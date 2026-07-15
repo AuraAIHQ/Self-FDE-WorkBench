@@ -59,6 +59,18 @@ pnpm run run            # 常驻；--once 只处理一个任务；--drain 清空
 pnpm run status         # 看进度
 ```
 
+## 安全与信任模型
+
+worker 用 `claude -p --dangerously-skip-permissions` 跑,这里**可接受**,前提是三条信任假设:
+
+1. **开发者自跑**——不是对外服务,是你/你的团队在自己机器上启动的编码循环。
+2. **隔离 worktree**——每个任务在独立 git worktree 里改动,目标 repo 主工作树不受影响;失败/异常的 worktree 会被清掉。
+3. **可信 task 规格**——`loop.json` 的任务来自你自己或 fde-copilot 产出的规格,不是匿名不可信输入。
+
+这与 [`../fde-copilot`](../fde-copilot) 的模型**不同**:那边直接吃陌生客户的输入,所以用 `permissionMode: default + canUseTool` 路径闸、绝不 skip-permissions。两个子项目的威胁模型不一样,权限策略也不同。
+
+reviewer 是**只读**的:只给 `Read/Grep/Glob`,并 `--disallowedTools Bash Write Edit …`(deny 优先于 skip-permissions),diff 由引擎预先算好喂进去,评审不写不跑命令。
+
 ## 输入契约：`loop.json`
 
 放在被监听目录（`loop-engineer.config.json` 的 `watchDirs`）下的任意子目录：

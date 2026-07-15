@@ -147,23 +147,26 @@ export async function runTask(job: LoadedJob, task: Task, config: Config): Promi
 
       // 跨模型评审面板（内层 + 可选外层），任一打回即返工
       const reviewPrompt = reviewerTpl.replace("{{TASK_BLOCK}}", tb);
+      // 评审 diff 预先算好，喂给两类 reviewer（agentic 也不必自己跑 git，从而可收成只读）
+      const reviewDiff = await diffAgainst(wt, integration);
       // 单次评审调用（agentic 或 chat）
       const callReviewer = async (rp: (typeof reviewers)[number]): Promise<string> => {
         if (rp.provider.kind === "openai-chat") {
-          const diff = await diffAgainst(wt, integration);
           return (
             await runChat(
               "你是严格、对抗性的代码评审员。直接输出一个 JSON 对象，第一个字符就是 {，不要任何解释文字或 markdown。",
-              `${reviewPrompt}\n\n${diff}`,
+              `${reviewPrompt}\n\n${reviewDiff}`,
               { provider: rp.provider },
             )
           ).text;
         }
         return (
-          await runAgent(reviewPrompt, {
+          await runAgent(`${reviewPrompt}\n\n${reviewDiff}`, {
             cwd: wt,
             provider: rp.provider,
-            allowedTools: ["Read", "Grep", "Glob", "Bash"],
+            // reviewer 只读：只给检索工具，并硬禁写/命令（deny 优先于 skip-permissions）
+            allowedTools: ["Read", "Grep", "Glob"],
+            disallowedTools: ["Bash", "Write", "Edit", "MultiEdit", "NotebookEdit"],
             mockHandler: rp.provider.isMock ? mockReviewer(task) : undefined,
           })
         ).text;
