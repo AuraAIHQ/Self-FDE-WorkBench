@@ -335,3 +335,150 @@ textarea:focus {
 .toast.err {
   color: var(--red);
 }
+
+/* —— 客户/项目重构：折叠侧栏 · 树 · 交付物 · 弹窗 —— */
+.app.nosidebar {
+  grid-template-columns: 1fr 1fr;
+}
+button.ghost.sm {
+  padding: 3px 8px;
+  font-size: 12px;
+}
+button.ghost.icon {
+  padding: 2px 8px;
+  margin-right: 8px;
+}
+button.ghost.block {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+  text-align: left;
+}
+.brand {
+  display: flex;
+  align-items: center;
+}
+
+/* 树 */
+.tree-client {
+  margin-bottom: 4px;
+}
+.tree-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 7px;
+  cursor: pointer;
+  font-weight: 600;
+}
+.tree-row:hover {
+  background: var(--panel);
+}
+.tree-row .caret {
+  color: var(--muted);
+  font-size: 11px;
+  width: 12px;
+}
+.tree-projects {
+  margin: 2px 0 6px 16px;
+  border-left: 1px solid var(--border);
+  padding-left: 8px;
+}
+.tree-project {
+  padding: 7px 9px;
+  border-radius: 7px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  margin-bottom: 4px;
+}
+.tree-project:hover {
+  background: var(--panel);
+}
+.tree-project.active {
+  background: var(--panel);
+  border-color: var(--accent);
+}
+.tree-project .pname {
+  font-size: 13px;
+}
+.tree-project .pmeta {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  color: var(--muted);
+  font-size: 11px;
+  margin-top: 3px;
+}
+.empty.sm {
+  padding: 8px;
+  font-size: 12px;
+}
+
+/* 交付物优先面板 */
+.deliverable {
+  padding: 14px 16px 4px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.dlv-type {
+  display: inline-block;
+  font-size: 11px;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  padding: 1px 9px;
+  margin-bottom: 8px;
+}
+.dlv-name {
+  font-size: 20px;
+  font-weight: 700;
+}
+.dlv-sub {
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 3px;
+}
+
+/* 弹窗 */
+.modal-bg {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+.modal {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  width: 460px;
+  max-width: 92vw;
+}
+.modal h3 {
+  margin: 0 0 12px;
+}
+.modal label {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+  margin: 10px 0 4px;
+}
+.modal select {
+  font: inherit;
+  width: 100%;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 9px 11px;
+}
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}

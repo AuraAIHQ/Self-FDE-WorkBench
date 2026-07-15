@@ -1,27 +1,51 @@
-// 系统贯穿的类型定义
+// 系统贯穿的类型定义（客户 Client → 项目 Project 两级）
 
-/** 用量：token 消耗 + 计算量(墙钟) + 成本估算 */
+export interface Readiness {
+  score: number;
+  loop_ready: boolean;
+  missing: string[];
+}
+
+export interface OpenQuestion {
+  id: string;
+  question: string;
+  why: string;
+}
+
+export interface ResearchNote {
+  claim: string;
+  source?: string;
+  needs_confirmation: boolean;
+}
+
+export interface TurnResult {
+  reply: string;
+  open_questions: OpenQuestion[];
+  research_notes: ResearchNote[];
+  readiness: Readiness;
+  updated_docs: string[];
+}
+
+export interface ConversationEntry {
+  role: "customer" | "copilot";
+  at: string;
+  text: string;
+  result?: TurnResult;
+  attachments?: string[];
+}
+
+// —— 用量 ——
 export interface Usage {
   inputTokens: number;
   outputTokens: number;
   cacheReadTokens: number;
-  /** 成本估算（USD）：Claude 侧取 SDK 的 total_cost_usd */
   costUsd: number;
-  /** 计算量代理：模型/agent 墙钟毫秒（"计算秒" = computeMs/1000） */
   computeMs: number;
-  /** 累计轮次/调用数 */
   turns: number;
 }
-
 export const ZERO_USAGE: Usage = {
-  inputTokens: 0,
-  outputTokens: 0,
-  cacheReadTokens: 0,
-  costUsd: 0,
-  computeMs: 0,
-  turns: 0,
+  inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, costUsd: 0, computeMs: 0, turns: 0,
 };
-
 export function addUsage(a: Usage, b: Usage): Usage {
   return {
     inputTokens: a.inputTokens + b.inputTokens,
@@ -33,70 +57,48 @@ export function addUsage(a: Usage, b: Usage): Usage {
   };
 }
 
-export interface ClientState {
+// —— 客户（背景自我介绍，被其下所有项目共享）——
+export interface Client {
   slug: string;
   name: string;
+  /** 客户基本背景 / 自我介绍，注入每个项目的对话上下文 */
+  background: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// —— 交付物（右栏以此为中心）——
+export const DELIVERABLE_TYPES = [
+  { id: "video", label: "视频", labelEn: "Video" },
+  { id: "video-resume", label: "视频简历", labelEn: "Video Resume" },
+  { id: "ppt", label: "PPT / 幻灯片", labelEn: "PPT / Slides" },
+  { id: "web", label: "网页 / 小程序", labelEn: "Web / Mini-app" },
+  { id: "doc", label: "文档 / 报告", labelEn: "Doc / Report" },
+  { id: "other", label: "其他", labelEn: "Other" },
+] as const;
+export type DeliverableType = (typeof DELIVERABLE_TYPES)[number]["id"];
+
+export interface Deliverable {
+  /** 交付物命名，如「我的视频简历」 */
+  name: string;
+  type: DeliverableType;
+}
+
+// —— 项目（客户下的一个交付目标，独立对话与规格）——
+export interface ProjectState {
+  slug: string;
+  clientSlug: string;
+  name: string;
+  deliverable: Deliverable;
   createdAt: string;
   updatedAt: string;
   rounds: number;
   status: "intake" | "building" | "testing" | "ready";
   lastReadiness: Readiness | null;
-  /** 该客户累计用量 */
   usage?: Usage;
 }
 
-export interface Readiness {
-  /** 0-100，规格离「下游 loop 可独立开工」的成熟度 */
-  score: number;
-  loop_ready: boolean;
-  /** 还差哪些东西才 loop-ready */
-  missing: string[];
-}
-
-export interface OpenQuestion {
-  id: string;
-  question: string;
-  /** 为什么需要问这个（哪块规格卡在这里） */
-  why: string;
-}
-
-export interface ResearchNote {
-  claim: string;
-  source?: string;
-  /** true = 这是 AI 的调研假设，需客户确认 */
-  needs_confirmation: boolean;
-}
-
-/** agent 每轮通过 submit_turn 工具交回的结构化结果 */
-export interface TurnResult {
-  reply: string;
-  open_questions: OpenQuestion[];
-  research_notes: ResearchNote[];
-  readiness: Readiness;
-  /** 本轮更新过的文档文件名 */
-  updated_docs: string[];
-}
-
-export interface ConversationEntry {
-  role: "customer" | "copilot";
-  at: string;
-  /** customer 侧为原始输入文本；copilot 侧为 reply */
-  text: string;
-  /** copilot 侧附带的结构化结果 */
-  result?: TurnResult;
-  /** 客户附带的文件（多模态）文件名，v0 仅记录 */
-  attachments?: string[];
-}
-
-/** 客户目录里的 spec 文档清单（顺序即展示顺序） */
 export const SPEC_DOCS = [
-  "SPEC.md",
-  "PRODUCT.md",
-  "FEATURES.md",
-  "TECH_SPEC.md",
-  "INTERACTIONS.md",
-  "GAPS.md",
-  "INTAKE.md",
+  "SPEC.md", "PRODUCT.md", "FEATURES.md", "TECH_SPEC.md", "INTERACTIONS.md", "GAPS.md", "INTAKE.md",
 ] as const;
-
 export type SpecDoc = (typeof SPEC_DOCS)[number];

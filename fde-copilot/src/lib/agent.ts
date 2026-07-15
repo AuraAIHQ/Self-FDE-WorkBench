@@ -3,7 +3,7 @@ import path from "node:path";
 import { z } from "zod";
 import { query, tool, createSdkMcpServer } from "@anthropic-ai/claude-agent-sdk";
 import type { CanUseTool } from "@anthropic-ai/claude-agent-sdk";
-import { clientDir, readConversation } from "./clients";
+import { projectDir, readConversation, readClient, readProjectState } from "./clients";
 import type { ConversationEntry, TurnResult, Usage } from "./types";
 import { ZERO_USAGE } from "./types";
 
@@ -100,7 +100,8 @@ function recentContext(history: ConversationEntry[], take = 6): string {
 }
 
 export interface RunTurnInput {
-  slug: string;
+  clientSlug: string;
+  projectSlug: string;
   customerInput: string;
   attachments?: string[];
 }
@@ -119,9 +120,11 @@ export interface RunTurnOutput {
  * cwd 锁定为该客户目录，agent 直接就地读写 spec 文档。
  */
 export async function runTurn(input: RunTurnInput): Promise<RunTurnOutput> {
-  const dir = clientDir(input.slug);
+  const dir = projectDir(input.clientSlug, input.projectSlug);
   const system = await loadSystemPrompt();
-  const history = await readConversation(input.slug);
+  const history = await readConversation(input.clientSlug, input.projectSlug);
+  const client = await readClient(input.clientSlug);
+  const project = await readProjectState(input.clientSlug, input.projectSlug);
 
   const sink: { value: TurnResult | null } = { value: null };
   const submitServer = createSdkMcpServer({
@@ -136,14 +139,25 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnOutput> {
     ? `\n\n客户本轮附带了文件（已存到当前目录，可用 Read 读取）：${safeAttachments.join(", ")}`
     : "";
 
-  const prompt = `## 最近对话
+  const clientContext = client
+    ? `## 客户背景（该客户下所有项目共享，务必据此定制）\n客户：${client.name}\n${client.background || "（客户未填背景）"}`
+    : "";
+  const deliverableContext = project
+    ? `## 本项目的交付物（右栏以此为中心，所有规格都服务于产出它）\n名称：${project.deliverable.name}\n类型：${project.deliverable.type}`
+    : "";
+
+  const prompt = `${clientContext}
+
+${deliverableContext}
+
+## 最近对话
 ${recentContext(history)}
 
 ## 客户本轮新输入
 ${input.customerInput}${attachNote}
 
 ## 你的任务
-按 system prompt 的流程处理这轮输入：读现状 → 融合更新当前目录下的 spec 文档 → 检缺口 → 能查的自己查、只有客户知道的抛问题 → 评估 readiness → 最后调用 mcp__workbench__submit_turn 恰好一次。`;
+按 system prompt 的流程处理这轮输入：结合上面的**客户背景**与**交付物目标**，读现状 → 融合更新当前目录下的 spec 文档 → 检缺口 → 能查的自己查、只有客户知道的抛问题 → 评估 readiness → 最后调用 mcp__workbench__submit_turn 恰好一次。`;
 
   const maxTurns = Number(process.env.AGENT_MAX_TURNS ?? 40);
   const model = process.env.CLAUDE_MODEL || undefined;

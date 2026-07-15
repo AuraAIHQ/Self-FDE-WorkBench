@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import path from "node:path";
-import { clientDir } from "./clients";
+import { projectDir } from "./clients";
 
 const pexec = promisify(execFile);
 
@@ -19,12 +19,13 @@ async function git(args: string[]): Promise<string> {
  * 提交某客户目录下的 spec 文档（不含 state.json / conversation.jsonl，已被 .gitignore）。
  * push 仅在显式要求且已配置 remote 时执行。
  */
-export async function commitClient(
-  slug: string,
+export async function commitProject(
+  clientSlug: string,
+  projectSlug: string,
   message: string,
   push = false,
 ): Promise<{ committed: boolean; pushed: boolean; detail: string }> {
-  const rel = path.relative(repoRoot(), clientDir(slug));
+  const rel = path.relative(repoRoot(), projectDir(clientSlug, projectSlug));
   await git(["add", "--", rel]);
 
   // 无变更则跳过
