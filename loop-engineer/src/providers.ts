@@ -161,7 +161,7 @@ export async function runChat(
       if (res.status === 429 || res.status >= 500) {
         lastErr = new Error(`${provider.name} HTTP ${res.status}: ${(await res.text()).slice(0, 160)}`);
         if (attempt < backoffMs.length) {
-          await new Promise((r) => setTimeout(r, backoffMs[attempt]));
+          await new Promise((r) => setTimeout(r, backoffMs[attempt] + Math.floor(Math.random() * 500)));
           continue; // 退避后重试
         }
         throw lastErr;
@@ -191,7 +191,7 @@ export async function runChat(
       // 网络/中断类瞬时错误也退避重试
       const transient = /aborted|ECONNRESET|ETIMEDOUT|fetch failed|network/i.test(lastErr.message);
       if (transient && attempt < backoffMs.length) {
-        await new Promise((r) => setTimeout(r, backoffMs[attempt]));
+        await new Promise((r) => setTimeout(r, backoffMs[attempt] + Math.floor(Math.random() * 500)));
         continue;
       }
       throw lastErr;
