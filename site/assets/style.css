@@ -245,6 +245,23 @@ nav.top a.link[aria-current]::after {
 }
 .hero .lede b { color: var(--paper); font-weight: 500; }
 
+/* hero: 左文字 / 右插画（小J 铁匠打造工具） */
+.hero-inner { display: grid; grid-template-columns: 1fr 420px; gap: 48px; align-items: center; }
+.hero-copy { min-width: 0; }
+.hero-art {
+  position: relative;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+}
+.hero-art img { display: block; width: 100%; height: auto; }
+@media (max-width: 900px) {
+  .hero-inner { grid-template-columns: 1fr; gap: 32px; }
+  .hero-art { max-width: 460px; margin: 0 auto; }
+}
+
 .hero-actions { display: flex; gap: 14px; margin-top: 24px; flex-wrap: wrap; }
 
 .btn {
