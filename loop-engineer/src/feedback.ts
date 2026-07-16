@@ -63,7 +63,7 @@ export async function reportBlocked(
   let out: BlockedOut | null = null;
   try {
     let text: string;
-    if (planner.kind === "openai-chat") {
+    if (planner.kind === "openai-compatible") {
       const spec = await readSome(job.jobDir, ["SPEC.md", "FEATURES.md", "GAPS.md"]);
       text = (await runChat(prompt, `## 相关规格\n\n${spec}`, { provider: planner })).text;
     } else {

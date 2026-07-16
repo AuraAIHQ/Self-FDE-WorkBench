@@ -84,6 +84,12 @@ export interface Deliverable {
   type: DeliverableType;
 }
 
+export type ProviderId = "claude" | "lmstudio";
+export interface ModelSelection {
+  provider: ProviderId;
+  model?: string;
+}
+
 // —— 项目（客户下的一个交付目标，独立对话与规格）——
 export interface ProjectState {
   slug: string;
@@ -96,6 +102,8 @@ export interface ProjectState {
   status: "intake" | "building" | "testing" | "ready";
   lastReadiness: Readiness | null;
   usage?: Usage;
+  /** 项目级模型路由；缺省时使用服务端 FDE_DEFAULT_PROVIDER。 */
+  model?: ModelSelection;
 }
 
 export const SPEC_DOCS = [

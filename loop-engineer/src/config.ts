@@ -2,7 +2,6 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Config } from "./types.js";
-import type { ProviderName } from "./types.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const PROJECT_ROOT = path.resolve(__dirname, "..");
@@ -38,18 +37,19 @@ export async function loadConfig(): Promise<Config> {
   return cfg;
 }
 
-/** agentic = 起 `claude -p`（要 Anthropic 端点）；chat = 单发 OpenAI /chat/completions */
-export type ProviderKind = "anthropic-agentic" | "openai-chat" | "mock";
+/** Anthropic Agent SDK、OpenAI-compatible（可按能力支持 coder）或 mock。 */
+export type ProviderKind = "anthropic-agentic" | "openai-compatible" | "mock";
 
 export interface ResolvedProvider {
   name: string;
   kind: ProviderKind;
   /** anthropic-agentic：传给 claude CLI 的 env 覆盖 */
   env: Record<string, string>;
-  /** openai-chat：网关 base URL / key */
+  /** openai-compatible：服务地址与可选 API key */
   baseUrl?: string;
   apiKey?: string;
   model?: string;
+  capabilities: { chat: boolean; agenticCoder: boolean };
   isMock: boolean;
 }
 
@@ -60,44 +60,72 @@ export interface ResolvedProvider {
  * - `hilinkup` / `hilinkup:<model>`：OpenAI 兼容网关，单发 chat（一 key 多模型）
  * - `mock`：本地模拟
  */
-export function resolveProvider(name: string): ResolvedProvider {
+export function resolveProvider(
+  name: string,
+  sourceEnv: NodeJS.ProcessEnv = process.env,
+): ResolvedProvider {
   if (name === "claude") {
-    return { name, kind: "anthropic-agentic", env: {}, isMock: false };
+    return {
+      name, kind: "anthropic-agentic", env: {}, capabilities: { chat: true, agenticCoder: true }, isMock: false,
+    };
   }
   if (name === "mock") {
-    return { name, kind: "mock", env: {}, isMock: true };
+    return { name, kind: "mock", env: {}, capabilities: { chat: true, agenticCoder: true }, isMock: true };
+  }
+  if (name === "lmstudio" || name.startsWith("lmstudio:")) {
+    const model = name.includes(":") ? name.slice(name.indexOf(":") + 1) : sourceEnv.LMSTUDIO_MODEL;
+    if (!model) throw new Error('LM Studio 需指定模型，如 "lmstudio:qwen2.5-7b-instruct-mlx"');
+    return {
+      name,
+      kind: "openai-compatible",
+      env: {},
+      baseUrl: (sourceEnv.LMSTUDIO_BASE_URL || "http://127.0.0.1:1234/v1").replace(/\/$/, ""),
+      apiKey: sourceEnv.LMSTUDIO_API_KEY,
+      model,
+      capabilities: { chat: true, agenticCoder: true },
+      isMock: false,
+    };
   }
   // OpenAI 兼容网关：hilinkup 或 hilinkup:<model>
   if (name === "hilinkup" || name.startsWith("hilinkup:")) {
-    const model = name.includes(":") ? name.slice(name.indexOf(":") + 1) : process.env.HILINKUP_MODEL;
-    const baseUrl = process.env.HILINKUP_BASE_URL || "https://hilinkup.com/v1";
-    const apiKey = process.env.HILINKUP_API_KEY;
+    const model = name.includes(":") ? name.slice(name.indexOf(":") + 1) : sourceEnv.HILINKUP_MODEL;
+    const baseUrl = sourceEnv.HILINKUP_BASE_URL || "https://hilinkup.com/v1";
+    const apiKey = sourceEnv.HILINKUP_API_KEY;
     if (!apiKey) throw new Error("hilinkup 缺少 HILINKUP_API_KEY（在 .env 配置）");
     if (!model) throw new Error(`hilinkup 需指定模型，如 "hilinkup:glm-5.1"（或设 HILINKUP_MODEL）`);
-    return { name, kind: "openai-chat", env: {}, baseUrl, apiKey, model, isMock: false };
+    return {
+      name, kind: "openai-compatible", env: {}, baseUrl, apiKey, model,
+      capabilities: { chat: true, agenticCoder: false }, isMock: false,
+    };
   }
-  const n = name as ProviderName;
-  const upper = n.toUpperCase();
-  const key = process.env[`${upper}_API_KEY`];
-  const base = process.env[`${upper}_BASE_URL`];
-  const model = process.env[`${upper}_MODEL`];
+  const upper = name.toUpperCase();
+  const key = sourceEnv[`${upper}_API_KEY`];
+  const base = sourceEnv[`${upper}_BASE_URL`];
+  const model = sourceEnv[`${upper}_MODEL`];
   if (!key || !base) {
     throw new Error(
-      `供应商 ${n} 缺少 ${upper}_API_KEY / ${upper}_BASE_URL（在 .env 配置，或把该角色改成 mock）`,
+      `供应商 ${name} 缺少 ${upper}_API_KEY / ${upper}_BASE_URL（在 .env 配置，或把该角色改成 mock）`,
     );
   }
-  const env: Record<string, string> = {
+  const envOverrides: Record<string, string> = {
     ANTHROPIC_BASE_URL: base,
     ANTHROPIC_AUTH_TOKEN: key,
   };
   if (model) {
     // 覆盖所有模型 slot，避免 claude 内部选 opus/sonnet/haiku 时回落到 Anthropic
-    env.ANTHROPIC_MODEL = model;
-    env.ANTHROPIC_DEFAULT_OPUS_MODEL = model;
-    env.ANTHROPIC_DEFAULT_SONNET_MODEL = model;
-    const haiku = process.env[`${upper}_HAIKU_MODEL`] || model;
-    env.ANTHROPIC_DEFAULT_HAIKU_MODEL = haiku;
-    env.ANTHROPIC_SMALL_FAST_MODEL = haiku;
+    envOverrides.ANTHROPIC_MODEL = model;
+    envOverrides.ANTHROPIC_DEFAULT_OPUS_MODEL = model;
+    envOverrides.ANTHROPIC_DEFAULT_SONNET_MODEL = model;
+    const haiku = sourceEnv[`${upper}_HAIKU_MODEL`] || model;
+    envOverrides.ANTHROPIC_DEFAULT_HAIKU_MODEL = haiku;
+    envOverrides.ANTHROPIC_SMALL_FAST_MODEL = haiku;
   }
-  return { name: n, kind: "anthropic-agentic", env, model, isMock: false };
+  return {
+    name,
+    kind: "anthropic-agentic",
+    env: envOverrides,
+    model,
+    capabilities: { chat: true, agenticCoder: true },
+    isMock: false,
+  };
 }

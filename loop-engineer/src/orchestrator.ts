@@ -75,10 +75,10 @@ export async function runTask(job: LoadedJob, task: Task, config: Config): Promi
   const integration = job.manifest.integrationBranch;
   // per-task 模型路由：任务可覆盖全局默认（难任务派更强的模型）
   const coder = resolveProvider(task.coderProvider ?? config.providers.coder);
-  if (coder.kind === "openai-chat") {
-    // agentic 编码需 Anthropic 端点或 codex；OpenAI 网关（HiLinkup）不能直接驱动 claude -p
+  if (!coder.capabilities.agenticCoder) {
+    // chat-only 网关不能编码；LM Studio 等声明 agenticCoder 的 OpenAI-compatible Provider 可以。
     task.status = "failed";
-    task.lastResult = `coder 不能用 OpenAI 网关(${coder.name})：agentic 编码需 Anthropic 端点(claude/glm/kimi/deepseek 直连)或 codex`;
+    task.lastResult = `coder Provider(${coder.name})不具备 agenticCoder 能力`;
     log.err(`  ${task.lastResult}`);
     await saveJob(job);
     return { ok: false, status: "failed", detail: task.lastResult };
@@ -151,7 +151,7 @@ export async function runTask(job: LoadedJob, task: Task, config: Config): Promi
       const reviewDiff = await diffAgainst(wt, integration);
       // 单次评审调用（agentic 或 chat）
       const callReviewer = async (rp: (typeof reviewers)[number]): Promise<string> => {
-        if (rp.provider.kind === "openai-chat") {
+        if (rp.provider.kind === "openai-compatible") {
           return (
             await runChat(
               "你是严格、对抗性的代码评审员。直接输出一个 JSON 对象，第一个字符就是 {，不要任何解释文字或 markdown。",
