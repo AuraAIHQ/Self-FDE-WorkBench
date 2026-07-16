@@ -19,7 +19,7 @@
 任务可用 `coderProvider` / `reviewerProvider` 覆盖为不同模型（per-task 路由，难任务派更强的）。
 
 **供应商两类**：
-- `anthropic-agentic`（`claude`/`glm`/`kimi`/`deepseek`）—— 起 `claude -p`，有文件/命令工具，**agentic coder 必须用这类**。
+- `anthropic-agentic`（`claude`/`glm`/`kimi`/`deepseek`）—— 起 `claude -p`，提供完整文件/命令工具。
 - `openai-compatible`（如 `hilinkup:<model>`、`lmstudio:<model>`）—— planner/reviewer 走标准 chat；只有声明 `agenticCoder` 能力的 Provider（当前为 LM Studio）才能作为 coder。HiLinkup 保持 chat-only。
 
 **两层评审**：内层（Kimi，快、便宜、PR 前本地挡明显错）+ 可选外层（DeepSeek，独立第二意见），双过才 merge。外层是接入完整 [PR-Daemon](../../PR-Daemon) 多轮 PK review 的接缝——见 [PLAN.md](./PLAN.md) 的 PR-Daemon 集成方案。
@@ -69,7 +69,7 @@ cp .env.example .env
 LOOP_PLANNER=lmstudio LOOP_CODER=lmstudio LOOP_REVIEWER=lmstudio pnpm run run
 ```
 
-也可用 `lmstudio:<模型 id>` 逐角色指定，例如 `LOOP_CODER=lmstudio:qwen2.5-7b-instruct-mlx`。planner/reviewer 使用 OpenAI-compatible chat；coder 使用文件与命令工具循环，所有文件工具路径均限制在任务 worktree 内。命令工具与原有 Claude coder 一样按可信任务模型运行，操作系统级隔离仍应通过容器或受限开发机提供。
+也可用 `lmstudio:<模型 id>` 逐角色指定，例如 `LOOP_CODER=lmstudio:qwen2.5-7b-instruct-mlx`。planner/reviewer 使用 OpenAI-compatible chat；coder 只获得限定在任务 worktree 内的读取、写入和目录浏览工具。模型完成编辑后，typecheck/test/build 等命令统一由 Loop 的质量闸按 `loop.json` 配置执行，不向本地模型暴露任意 shell。
 
 ## 安全与信任模型
 

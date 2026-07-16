@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -64,32 +64,29 @@ test("LM Studio coding agent cannot write outside its worktree", async () => {
   await assert.rejects(readFile(path.resolve(cwd, "../escape.txt"), "utf8"));
 });
 
-test("LM Studio coding agent runs quality commands with the worktree as cwd", async () => {
+test("LM Studio coding agent cannot write through a symlink outside its worktree", async () => {
   const cwd = await mkdtemp(path.join(os.tmpdir(), "loop-local-"));
-  let commandCwd = "";
+  const outside = await mkdtemp(path.join(os.tmpdir(), "loop-outside-"));
+  const target = path.join(outside, "target.txt");
+  await writeFile(target, "safe\n", "utf8");
+  await symlink(target, path.join(cwd, "link.txt"));
   const responses = [
     {
       choices: [{ message: { role: "assistant" as const, content: "", tool_calls: [{
-        id: "cmd-1", type: "function" as const,
-        function: { name: "run_command", arguments: '{"command":"pnpm test"}' },
+        id: "write-1", type: "function" as const,
+        function: { name: "write_file", arguments: '{"path":"link.txt","content":"bad"}' },
       }] } }],
     },
-    { choices: [{ message: { role: "assistant" as const, content: "tests pass" } }] },
+    { choices: [{ message: { role: "assistant" as const, content: "stopped" } }] },
   ];
 
-  const out = await runLocalCodingAgent({
+  await runLocalCodingAgent({
     cwd,
     baseUrl: "http://lm.test/v1",
     model: "local-coder",
-    prompt: "test",
+    prompt: "escape",
     request: async () => responses.shift()!,
-    commandRunner: async (command, actualCwd) => {
-      assert.equal(command, "pnpm test");
-      commandCwd = actualCwd;
-      return { exitCode: 0, output: "ok" };
-    },
   });
 
-  assert.equal(commandCwd, cwd);
-  assert.equal(out.text, "tests pass");
+  assert.equal(await readFile(target, "utf8"), "safe\n");
 });

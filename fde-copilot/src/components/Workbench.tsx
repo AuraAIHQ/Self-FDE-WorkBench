@@ -495,7 +495,10 @@ export default function Workbench() {
             )}
             <div className="modal-actions">
               <button className="ghost" onClick={() => setNewProject(null)}>{t.cancel}</button>
-              <button className="primary" onClick={createProject} disabled={!newProject.name.trim()}>{t.create}</button>
+              <button className="primary" onClick={createProject}
+                disabled={!newProject.name.trim() || (newProject.provider === "lmstudio" && !newProject.model)}>
+                {t.create}
+              </button>
             </div>
           </div>
         </div>

@@ -49,7 +49,12 @@ export interface ResolvedProvider {
   baseUrl?: string;
   apiKey?: string;
   model?: string;
-  capabilities: { chat: boolean; agenticCoder: boolean };
+  capabilities: {
+    chat: boolean;
+    agenticCoder: boolean;
+    /** Whether the role must receive file/diff context inline instead of reading it with agent tools. */
+    contextAccess: "agentic" | "inline";
+  };
   isMock: boolean;
 }
 
@@ -66,11 +71,11 @@ export function resolveProvider(
 ): ResolvedProvider {
   if (name === "claude") {
     return {
-      name, kind: "anthropic-agentic", env: {}, capabilities: { chat: true, agenticCoder: true }, isMock: false,
+      name, kind: "anthropic-agentic", env: {}, capabilities: { chat: true, agenticCoder: true, contextAccess: "agentic" }, isMock: false,
     };
   }
   if (name === "mock") {
-    return { name, kind: "mock", env: {}, capabilities: { chat: true, agenticCoder: true }, isMock: true };
+    return { name, kind: "mock", env: {}, capabilities: { chat: true, agenticCoder: true, contextAccess: "agentic" }, isMock: true };
   }
   if (name === "lmstudio" || name.startsWith("lmstudio:")) {
     const model = name.includes(":") ? name.slice(name.indexOf(":") + 1) : sourceEnv.LMSTUDIO_MODEL;
@@ -82,7 +87,7 @@ export function resolveProvider(
       baseUrl: (sourceEnv.LMSTUDIO_BASE_URL || "http://127.0.0.1:1234/v1").replace(/\/$/, ""),
       apiKey: sourceEnv.LMSTUDIO_API_KEY,
       model,
-      capabilities: { chat: true, agenticCoder: true },
+      capabilities: { chat: true, agenticCoder: true, contextAccess: "inline" },
       isMock: false,
     };
   }
@@ -95,7 +100,7 @@ export function resolveProvider(
     if (!model) throw new Error(`hilinkup 需指定模型，如 "hilinkup:glm-5.1"（或设 HILINKUP_MODEL）`);
     return {
       name, kind: "openai-compatible", env: {}, baseUrl, apiKey, model,
-      capabilities: { chat: true, agenticCoder: false }, isMock: false,
+      capabilities: { chat: true, agenticCoder: false, contextAccess: "inline" }, isMock: false,
     };
   }
   const upper = name.toUpperCase();
@@ -125,7 +130,7 @@ export function resolveProvider(
     kind: "anthropic-agentic",
     env: envOverrides,
     model,
-    capabilities: { chat: true, agenticCoder: true },
+    capabilities: { chat: true, agenticCoder: true, contextAccess: "agentic" },
     isMock: false,
   };
 }

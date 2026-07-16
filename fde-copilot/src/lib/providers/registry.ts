@@ -38,6 +38,22 @@ export function resolveProviderSelection(
   return { provider, ...(model ? { model } : {}) };
 }
 
+export function availableDefaultSelection(
+  providers: ProviderDescriptor[],
+  desired: ModelSelection,
+): ModelSelection {
+  const provider = providers.find((candidate) => candidate.id === desired.provider && candidate.available)
+    ?? providers.find((candidate) => candidate.available);
+  if (!provider) return { provider: "claude" };
+  if (provider.id === "lmstudio") {
+    const model = desired.provider === "lmstudio" && desired.model && provider.models.includes(desired.model)
+      ? desired.model
+      : provider.models[0];
+    return { provider: "lmstudio", ...(model ? { model } : {}) };
+  }
+  return { provider: provider.id, ...(desired.provider === provider.id && desired.model ? { model: desired.model } : {}) };
+}
+
 interface LmStudioModel {
   type?: string;
   key?: string;
@@ -78,7 +94,15 @@ export async function discoverProviders(options?: {
     const models = options?.requestModels
       ? await options.requestModels()
       : await fetchModels(options?.baseUrl ?? lmStudioBaseUrl());
-    providers.push({ id: "lmstudio", label: "LM Studio", available: true, models });
+    providers.push(models.length > 0
+      ? { id: "lmstudio", label: "LM Studio", available: true, models }
+      : {
+          id: "lmstudio",
+          label: "LM Studio",
+          available: false,
+          models: [],
+          error: "未发现支持工具调用的 LLM",
+        });
   } catch (error) {
     providers.push({
       id: "lmstudio",

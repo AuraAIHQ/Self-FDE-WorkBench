@@ -1,5 +1,4 @@
 import { promises as fs } from "node:fs";
-import path from "node:path";
 import { z } from "zod";
 import { SPEC_DOCS, type TurnResult, type Usage, ZERO_USAGE } from "../types";
 import {
@@ -8,6 +7,7 @@ import {
   type ChatCompletionRequest,
   type FunctionTool,
 } from "./openai-compatible";
+import { safeProjectPath } from "./path-policy";
 
 const TurnResultSchema = z.object({
   reply: z.string(),
@@ -111,14 +111,11 @@ const tools: FunctionTool[] = [
   },
 ];
 
-function safeSpec(root: string, file: unknown): string {
+async function safeSpec(root: string, file: unknown): Promise<string> {
   if (typeof file !== "string" || !SPEC_DOCS.includes(file as (typeof SPEC_DOCS)[number])) {
     throw new Error(`不允许访问规格文件：${String(file)}`);
   }
-  const resolvedRoot = path.resolve(root);
-  const resolved = path.resolve(root, file);
-  if (!resolved.startsWith(resolvedRoot + path.sep)) throw new Error(`规格路径越界：${file}`);
-  return resolved;
+  return safeProjectPath(root, file);
 }
 
 export interface RunLmStudioSpecAgentOptions {
@@ -155,10 +152,10 @@ export async function runLmStudioSpecAgent(
     request: opts.request,
     executeTool: async (name, input) => {
       if (name === "list_specs") return JSON.stringify(SPEC_DOCS);
-      if (name === "read_spec") return fs.readFile(safeSpec(opts.root, input.file), "utf8");
+      if (name === "read_spec") return fs.readFile(await safeSpec(opts.root, input.file), "utf8");
       if (name === "write_spec") {
         if (typeof input.content !== "string") throw new Error("write_spec.content 必须是字符串");
-        await fs.writeFile(safeSpec(opts.root, input.file), input.content, "utf8");
+        await fs.writeFile(await safeSpec(opts.root, input.file), input.content, "utf8");
         return `已更新 ${String(input.file)}`;
       }
       if (name === "submit_turn") {

@@ -1,17 +1,20 @@
-import path from "node:path";
 import { z } from "zod";
 import { query, tool, createSdkMcpServer } from "@anthropic-ai/claude-agent-sdk";
 import type { CanUseTool } from "@anthropic-ai/claude-agent-sdk";
 import type { TurnResult, Usage } from "../types";
 import { ZERO_USAGE } from "../types";
 import type { SpecAgentContext, SpecAgentOutput } from "./spec-provider";
+import { safeProjectPath } from "./path-policy";
 
 function makeCanUseTool(root: string): CanUseTool {
-  const base = path.resolve(root);
-  const inside = (p: unknown): boolean => {
+  const inside = async (p: unknown): Promise<boolean> => {
     if (typeof p !== "string" || p.length === 0) return false;
-    const abs = path.isAbsolute(p) ? path.resolve(p) : path.resolve(base, p);
-    return abs === base || abs.startsWith(base + path.sep);
+    try {
+      await safeProjectPath(root, p);
+      return true;
+    } catch {
+      return false;
+    }
   };
   const pathKey: Record<string, string> = {
     Read: "file_path",
@@ -28,12 +31,12 @@ function makeCanUseTool(root: string): CanUseTool {
     }
     if (toolName in pathKey) {
       const p = (input as Record<string, unknown>)[pathKey[toolName]];
-      if (!inside(p)) return { behavior: "deny", message: `拒绝越界路径：${String(p)}（仅允许客户目录内）` };
+      if (!(await inside(p))) return { behavior: "deny", message: `拒绝越界路径：${String(p)}（仅允许客户目录内）` };
       return { behavior: "allow", updatedInput: input };
     }
     if (toolName === "Glob" || toolName === "Grep") {
       const p = (input as Record<string, unknown>).path;
-      if (p !== undefined && !inside(p)) {
+      if (p !== undefined && !(await inside(p))) {
         return { behavior: "deny", message: `拒绝越界搜索路径：${String(p)}` };
       }
       return { behavior: "allow", updatedInput: input };

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -84,4 +84,39 @@ test("LM Studio spec agent rejects writes outside the spec allowlist", async () 
   });
 
   await assert.rejects(readFile(path.join(root, "..", "escape.md"), "utf8"));
+});
+
+test("LM Studio spec agent rejects an allowlisted document symlinked outside the project", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "fde-lmstudio-"));
+  const outside = await mkdtemp(path.join(os.tmpdir(), "fde-outside-"));
+  const target = path.join(outside, "target.md");
+  await writeFile(target, "# safe\n", "utf8");
+  await symlink(target, path.join(root, "SPEC.md"));
+  const responses = [
+    {
+      choices: [{
+        message: {
+          role: "assistant" as const,
+          content: "",
+          tool_calls: [{
+            id: "write-1", type: "function" as const,
+            function: { name: "write_spec", arguments: '{"file":"SPEC.md","content":"# bad\\n"}' },
+          }],
+        },
+        finish_reason: "tool_calls",
+      }],
+    },
+    { choices: [{ message: { role: "assistant" as const, content: "stopped" }, finish_reason: "stop" }] },
+  ];
+
+  await runLmStudioSpecAgent({
+    root,
+    model: "local-model",
+    baseUrl: "http://lm.test/v1",
+    system: "system",
+    user: "user",
+    request: async () => responses.shift()!,
+  });
+
+  assert.equal(await readFile(target, "utf8"), "# safe\n");
 });

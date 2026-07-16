@@ -151,7 +151,7 @@ export async function runTask(job: LoadedJob, task: Task, config: Config): Promi
       const reviewDiff = await diffAgainst(wt, integration);
       // 单次评审调用（agentic 或 chat）
       const callReviewer = async (rp: (typeof reviewers)[number]): Promise<string> => {
-        if (rp.provider.kind === "openai-compatible") {
+        if (rp.provider.capabilities.contextAccess === "inline") {
           return (
             await runChat(
               "你是严格、对抗性的代码评审员。直接输出一个 JSON 对象，第一个字符就是 {，不要任何解释文字或 markdown。",

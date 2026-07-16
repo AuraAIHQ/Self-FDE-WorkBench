@@ -1,4 +1,3 @@
-import { spawn } from "node:child_process";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
@@ -46,10 +45,6 @@ export interface RunLocalCodingAgentOptions {
   maxTokens?: number;
   timeoutMs?: number;
   request?: (body: LocalChatRequest) => Promise<LocalChatResponse>;
-  commandRunner?: (
-    command: string,
-    cwd: string,
-  ) => Promise<{ exitCode: number; output: string }>;
 }
 
 const tools: Array<Record<string, unknown>> = [
@@ -91,19 +86,6 @@ const tools: Array<Record<string, unknown>> = [
       },
     },
   },
-  {
-    type: "function",
-    function: {
-      name: "run_command",
-      description: "Run a shell command with the task worktree as cwd. Use it for tests, typechecks, builds, git status, and inspection.",
-      parameters: {
-        type: "object",
-        properties: { command: { type: "string" } },
-        required: ["command"],
-        additionalProperties: false,
-      },
-    },
-  },
 ];
 
 async function safePath(cwd: string, input: unknown): Promise<string> {
@@ -124,29 +106,6 @@ async function safePath(cwd: string, input: unknown): Promise<string> {
   return candidate;
 }
 
-async function runCommand(
-  command: string,
-  cwd: string,
-  timeoutMs: number,
-): Promise<{ exitCode: number; output: string }> {
-  return new Promise((resolve, reject) => {
-    const child = spawn("/bin/sh", ["-lc", command], { cwd, env: process.env });
-    let output = "";
-    const append = (chunk: unknown) => { output += String(chunk); };
-    const timer = setTimeout(() => {
-      child.kill("SIGKILL");
-      reject(new Error(`命令超时（${timeoutMs}ms）：${command}`));
-    }, timeoutMs);
-    child.stdout.on("data", append);
-    child.stderr.on("data", append);
-    child.on("error", (error) => { clearTimeout(timer); reject(error); });
-    child.on("close", (code) => {
-      clearTimeout(timer);
-      resolve({ exitCode: code ?? -1, output: output.slice(-50_000) });
-    });
-  });
-}
-
 async function executeTool(
   opts: RunLocalCodingAgentOptions,
   name: string,
@@ -162,13 +121,6 @@ async function executeTool(
     const dir = await safePath(opts.cwd, typeof input.path === "string" ? input.path : ".");
     const entries = await fs.readdir(dir, { withFileTypes: true });
     return entries.map((entry) => `${entry.isDirectory() ? "d" : "f"} ${entry.name}`).join("\n");
-  }
-  if (name === "run_command") {
-    if (typeof input.command !== "string" || !input.command.trim()) throw new Error("command 必须是非空字符串");
-    const result = opts.commandRunner
-      ? await opts.commandRunner(input.command, opts.cwd)
-      : await runCommand(input.command, opts.cwd, opts.timeoutMs ?? 600_000);
-    return `exitCode=${result.exitCode}\n${result.output}`;
   }
   throw new Error(`未知工具：${name}`);
 }
@@ -200,7 +152,7 @@ export async function runLocalCodingAgent(opts: RunLocalCodingAgentOptions): Pro
   const messages: LocalMessage[] = [
     {
       role: "system",
-      content: "You are an autonomous coding agent. Work only inside the provided worktree using tools. Inspect files before editing, implement the task, and finish with a concise summary. Never invent tool results.",
+      content: "You are an autonomous coding agent. Work only inside the provided worktree using the file tools. Inspect files before editing, implement the task, and finish with a concise summary. The loop engine runs configured quality gates after you finish; do not request or invent shell execution. Never invent tool results.",
     },
     { role: "user", content: opts.prompt },
   ];

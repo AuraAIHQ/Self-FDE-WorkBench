@@ -10,7 +10,7 @@ test("LM Studio provider advertises chat and agentic coding capabilities", () =>
   assert.equal(provider.kind, "openai-compatible");
   assert.equal(provider.model, "qwen-local");
   assert.equal(provider.baseUrl, "http://host.docker.internal:1234/v1");
-  assert.deepEqual(provider.capabilities, { chat: true, agenticCoder: true });
+  assert.deepEqual(provider.capabilities, { chat: true, agenticCoder: true, contextAccess: "inline" });
 });
 
 test("OpenAI gateway remains chat-only", () => {
@@ -20,5 +20,5 @@ test("OpenAI gateway remains chat-only", () => {
   });
 
   assert.equal(provider.kind, "openai-compatible");
-  assert.deepEqual(provider.capabilities, { chat: true, agenticCoder: false });
+  assert.deepEqual(provider.capabilities, { chat: true, agenticCoder: false, contextAccess: "inline" });
 });

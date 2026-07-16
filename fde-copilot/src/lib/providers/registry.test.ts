@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { discoverProviders, resolveProviderSelection, selectToolModels } from "./registry";
+import {
+  availableDefaultSelection,
+  discoverProviders,
+  resolveProviderSelection,
+  selectToolModels,
+} from "./registry";
 
 test("project model selection overrides server defaults", () => {
   assert.deepEqual(
@@ -30,4 +35,22 @@ test("LM Studio discovery excludes embeddings and models without native tool tra
     { type: "embedding", key: "embed" },
     { type: "llm", key: "plain", capabilities: { trained_for_tool_use: false } },
   ]), ["qwen"]);
+});
+
+test("LM Studio is unavailable when it has no tool-capable models", async () => {
+  const providers = await discoverProviders({ requestModels: async () => [] });
+  assert.deepEqual(providers[1], {
+    id: "lmstudio",
+    label: "LM Studio",
+    available: false,
+    models: [],
+    error: "未发现支持工具调用的 LLM",
+  });
+});
+
+test("an unavailable configured default falls back to an available provider", () => {
+  assert.deepEqual(availableDefaultSelection([
+    { id: "claude", label: "Claude", available: true, models: [] },
+    { id: "lmstudio", label: "LM Studio", available: false, models: [] },
+  ], { provider: "lmstudio" }), { provider: "claude" });
 });
