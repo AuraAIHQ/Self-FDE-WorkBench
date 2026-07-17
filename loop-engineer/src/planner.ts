@@ -51,7 +51,7 @@ export async function planSpec(
 
   log.step(`拆解规格 ${specDir}（planner=${planner.name}）`);
   let res;
-  if (planner.kind === "openai-chat") {
+  if (planner.capabilities.contextAccess === "inline") {
     // 单发 chat：无 Read 工具，自己把规格文档拼进去
     const docs = await readSpecDocs(specDir);
     res = await runChat(tpl, `## 规格文档\n\n${docs}`, { provider: planner, maxTokens: 8000 });
