@@ -23,6 +23,42 @@ export interface RunAgentResult {
 }
 
 /**
+ * W2 / B2 硬约束：coder/reviewer 在 worktree 里执行「模型自动生成的代码」。
+ * push 用的 GitHub PAT / fine-grained token、以及编排层的 admin/回调密钥，
+ * 绝不能被这段沙箱代码读到（否则生成代码可外泄 token、推任意仓）。
+ *
+ * 因此 spawn `claude` 前，把这些机密从继承的 env 里剥掉。模型端点认证
+ * （provider.env 的 ANTHROPIC_*）由调用方随后并入，是模型必需、非 git 凭证，保留。
+ */
+const SANDBOX_DENY_KEYS = new Set([
+  "WORKBENCH_PUSH_TOKEN",
+  "WORKBENCH_TOKEN",
+  "WORKBENCH_CALLBACK_SECRET",
+  "GITHUB_TOKEN",
+  "GH_TOKEN",
+  "GITHUB_PAT",
+  "GH_PAT",
+  "GITHUB_APP_PRIVATE_KEY",
+]);
+
+/** 净化沙箱环境：删掉 push token / PAT / 编排密钥，再并入 provider.env（模型端点认证）。 */
+export function sandboxEnv(
+  base: NodeJS.ProcessEnv,
+  providerEnv: Record<string, string>,
+): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...base };
+  for (const k of Object.keys(env)) {
+    if (SANDBOX_DENY_KEYS.has(k)) {
+      delete env[k];
+    } else if (/(?:GITHUB|GH)_.*(?:TOKEN|PAT)/i.test(k) || /PUSH_TOKEN/i.test(k)) {
+      // 泛化兜底：任何形如 *_GITHUB_TOKEN / *_PUSH_TOKEN 的都不进沙箱
+      delete env[k];
+    }
+  }
+  return { ...env, ...providerEnv };
+}
+
+/**
  * 统一原语：把一个 prompt 交给某供应商执行。
  * 真实供应商 = spawn `claude -p`，用 provider.env 覆盖端点/模型（订阅/GLM/Kimi 同一机制）。
  * mock = 本地模拟，用于无 key 跑通编排。
@@ -57,7 +93,8 @@ export async function runAgent(prompt: string, opts: RunAgentOpts): Promise<RunA
     args.push("--allowedTools", ...opts.allowedTools);
   }
 
-  const env = { ...process.env, ...provider.env };
+  // B2：剥离 push token/PAT/编排密钥，绝不让沙箱代码读到 git 凭证
+  const env = sandboxEnv(process.env, provider.env);
 
   const result = await new Promise<RunAgentResult>((resolve, reject) => {
     const child = spawn("claude", args, { cwd: opts.cwd, env });
