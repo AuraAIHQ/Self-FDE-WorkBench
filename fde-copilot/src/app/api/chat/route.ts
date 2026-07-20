@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { readProjectState, writeProjectState, appendConversation } from "@/lib/clients";
 import { runTurn } from "@/lib/agent";
-import { commitProject } from "@/lib/git";
+import { commitProject, type CommitResult } from "@/lib/git";
 import { scopedAuthError } from "@/lib/auth";
 import { addUsage, ZERO_USAGE } from "@/lib/types";
 
@@ -61,14 +61,14 @@ export async function POST(req: Request) {
     usage: addUsage(state.usage ?? ZERO_USAGE, out.usage),
   });
 
-  let commit: { committed: boolean; pushed: boolean; detail: string } | null = null;
+  let commit: CommitResult | null = null;
   if (process.env.AUTO_COMMIT === "true") {
     try {
       commit = await commitProject(
         clientSlug,
         projectSlug,
         `docs(${clientSlug}/${projectSlug}): 第 ${state.rounds + 1} 轮 spec（readiness ${out.result.readiness.score}）`,
-        process.env.AUTO_PUSH === "true",
+        { push: process.env.AUTO_PUSH === "true" },
       );
     } catch (e) {
       commit = { committed: false, pushed: false, detail: `提交失败：${(e as Error).message}` };
