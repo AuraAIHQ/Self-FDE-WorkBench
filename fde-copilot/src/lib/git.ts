@@ -118,13 +118,17 @@ export async function pushSpecToRepo(
     return { committed: false, pushed: false, detail: "无 spec 文档，跳过", repo: repoUrl };
   }
 
+  // #1：注入 token 前先校验 host 白名单，绝不把 push token 发往非预期主机
+  if (token) assertAllowedPushHost(repoUrl);
+
   const branch = process.env.WORKBENCH_PUSH_BRANCH || "main";
-  const authUrl = buildAuthUrl(repoUrl, token);
   const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "wb-spec-"));
   const work = path.join(tmp, "repo");
   try {
+    // token 走 GIT_ASKPASS（env），不进 argv、不落 .git/config
+    const auth = await buildPushAuth(repoUrl, token, tmp);
     // clone（空仓库也会成功，只是警告）；报错脱敏 token
-    await runGit(["clone", authUrl, work], tmp, token);
+    await runGit(["clone", auth.url, work], tmp, token, auth.env);
 
     // 写 spec 文档到 spec/ 子目录
     const specDir = path.join(work, "spec");
@@ -153,7 +157,7 @@ export async function pushSpecToRepo(
       token,
     );
     const sha = await runGit(["rev-parse", "HEAD"], work, token);
-    await runGit(["push", "origin", `HEAD:refs/heads/${branch}`], work, token);
+    await runGit(["push", "origin", `HEAD:refs/heads/${branch}`], work, token, auth.env);
 
     return { committed: true, pushed: true, sha, detail: `spec 已 push 到目标仓库（${branch}）`, repo: repoUrl };
   } finally {
@@ -161,26 +165,76 @@ export async function pushSpecToRepo(
   }
 }
 
-/** 给 https 远程注入 token（x-access-token 约定，兼容 GitHub PAT / App token）。非 https 原样返回。 */
-function buildAuthUrl(repoUrl: string, token?: string): string {
-  if (!token) return repoUrl;
+/** 允许注入 push token 的 host 白名单（默认 github.com；WORKBENCH_ALLOWED_PUSH_HOSTS 逗号分隔可扩展）。 */
+function allowedPushHosts(): string[] {
+  const raw = process.env.WORKBENCH_ALLOWED_PUSH_HOSTS;
+  return (raw ? raw.split(",") : ["github.com"]).map((s) => s.trim().toLowerCase()).filter(Boolean);
+}
+
+/**
+ * #1：注入 push token 前的 host 白名单校验。
+ * 只有 https 才会注入 token —— 若其 host 不在白名单 → 抛错（防 `repo=https://evil.com` 把
+ * push 凭证发到任意主机）。非 https（ssh/git@/file/本地路径）不注入 token，直接放行。
+ */
+export function assertAllowedPushHost(repoUrl: string): void {
+  let host: string;
   try {
     const u = new URL(repoUrl);
-    if (u.protocol === "https:") {
-      u.username = "x-access-token";
-      u.password = token;
-      return u.toString();
-    }
-    return repoUrl; // ssh:// / git@ / file:// 等：不注入
+    if (u.protocol !== "https:") return; // 不注入 token 的协议，无泄漏面
+    host = u.host.toLowerCase();
   } catch {
-    return repoUrl;
+    return; // 非 URL（本地路径）→ 不注入 token
+  }
+  if (!allowedPushHosts().includes(host)) {
+    throw new Error(`repo host 不在 push 白名单：${host}（允许：${allowedPushHosts().join(", ")}）`);
   }
 }
 
-/** git 执行 + 错误脱敏（把 token 从报错里抹掉，防泄漏到响应/日志） */
-async function runGit(args: string[], cwd: string, token?: string): Promise<string> {
+interface PushAuth {
+  /** 送给 git 的 URL：含用户名 x-access-token（非机密），但**不含** token */
+  url: string;
+  /** token 经 GIT_ASKPASS 从 env 提供，不进 argv、不写 .git/config */
+  env: Record<string, string>;
+}
+
+/**
+ * 构造 push 认证（小 finding：token 不进 argv / 不落盘）。
+ * https + token：URL 只带用户名，token 走 GIT_ASKPASS（env `WB_GIT_TOKEN`）。
+ * 非 https 或无 token：原样，无 askpass。
+ */
+async function buildPushAuth(repoUrl: string, token: string | undefined, tmp: string): Promise<PushAuth> {
+  if (!token) return { url: repoUrl, env: {} };
+  let u: URL;
   try {
-    const { stdout } = await pexec("git", args, { cwd, maxBuffer: 16 * 1024 * 1024 });
+    u = new URL(repoUrl);
+  } catch {
+    return { url: repoUrl, env: {} }; // 本地路径
+  }
+  if (u.protocol !== "https:") return { url: repoUrl, env: {} };
+  assertAllowedPushHost(repoUrl); // 双保险
+  u.username = "x-access-token";
+  u.password = ""; // token 不进 URL
+  const askpass = path.join(tmp, "askpass.sh");
+  await fs.writeFile(askpass, `#!/bin/sh\nexec printf '%s' "$WB_GIT_TOKEN"\n`, { mode: 0o700 });
+  return {
+    url: u.toString(),
+    env: { GIT_ASKPASS: askpass, WB_GIT_TOKEN: token, GIT_TERMINAL_PROMPT: "0" },
+  };
+}
+
+/** git 执行 + 错误脱敏（把 token 从报错里抹掉，防泄漏到响应/日志） */
+async function runGit(
+  args: string[],
+  cwd: string,
+  token?: string,
+  extraEnv?: Record<string, string>,
+): Promise<string> {
+  try {
+    const { stdout } = await pexec("git", args, {
+      cwd,
+      maxBuffer: 16 * 1024 * 1024,
+      env: extraEnv ? { ...process.env, ...extraEnv } : process.env,
+    });
     return stdout.trim();
   } catch (e) {
     throw new Error(redact((e as Error).message, token));

@@ -23,37 +23,54 @@ export interface RunAgentResult {
 }
 
 /**
- * W2 / B2 硬约束：coder/reviewer 在 worktree 里执行「模型自动生成的代码」。
- * push 用的 GitHub PAT / fine-grained token、以及编排层的 admin/回调密钥，
- * 绝不能被这段沙箱代码读到（否则生成代码可外泄 token、推任意仓）。
+ * W2 / B2 硬约束：coder/reviewer 在 worktree 里执行「模型自动生成的代码」。跑不可信代码的
+ * 沙箱应用**白名单**（而非黑名单）——从最小 env 起，只放行明确需要的键，杜绝 host 上其它
+ * 机密（云凭证 AWS_*、其它 *_API_KEY/*_SECRET、SSH agent socket 等）被生成代码读到外泄。
  *
- * 因此 spawn `claude` 前，把这些机密从继承的 env 里剥掉。模型端点认证
- * （provider.env 的 ANTHROPIC_*）由调用方随后并入，是模型必需、非 git 凭证，保留。
+ * 模型端点认证（provider.env 的 ANTHROPIC_*）由调用方随后并入 —— 模型必需、非 git 凭证。
  */
-const SANDBOX_DENY_KEYS = new Set([
-  "WORKBENCH_PUSH_TOKEN",
-  "WORKBENCH_TOKEN",
-  "WORKBENCH_CALLBACK_SECRET",
-  "GITHUB_TOKEN",
-  "GH_TOKEN",
-  "GITHUB_PAT",
-  "GH_PAT",
-  "GITHUB_APP_PRIVATE_KEY",
+const SANDBOX_ALLOW_KEYS = new Set([
+  "PATH",
+  "HOME",
+  "HOMEDRIVE",
+  "HOMEPATH",
+  "USERPROFILE",
+  "LANG",
+  "LC_ALL",
+  "LC_CTYPE",
+  "TZ",
+  "TERM",
+  "SHELL",
+  "USER",
+  "LOGNAME",
+  "TMPDIR",
+  "TEMP",
+  "TMP",
+  "XDG_CONFIG_HOME",
+  "XDG_CACHE_HOME",
+  "XDG_DATA_HOME",
+  "NODE_EXTRA_CA_CERTS",
+  "SSL_CERT_FILE",
+  "SSL_CERT_DIR",
 ]);
 
-/** 净化沙箱环境：删掉 push token / PAT / 编排密钥，再并入 provider.env（模型端点认证）。 */
+/**
+ * 构造沙箱环境（白名单）：从最小 allowlist 起，只放行必要的系统/locale 变量，
+ * 再并入 provider.env（模型端点认证）。运维可用 LOOP_SANDBOX_PASSTHROUGH（逗号分隔）
+ * 追加确需透传的键（如某些 CI 环境的代理设置）。
+ */
 export function sandboxEnv(
   base: NodeJS.ProcessEnv,
   providerEnv: Record<string, string>,
 ): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = { ...base };
-  for (const k of Object.keys(env)) {
-    if (SANDBOX_DENY_KEYS.has(k)) {
-      delete env[k];
-    } else if (/(?:GITHUB|GH)_.*(?:TOKEN|PAT)/i.test(k) || /PUSH_TOKEN/i.test(k)) {
-      // 泛化兜底：任何形如 *_GITHUB_TOKEN / *_PUSH_TOKEN 的都不进沙箱
-      delete env[k];
-    }
+  const extra = (process.env.LOOP_SANDBOX_PASSTHROUGH ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const allow = new Set([...SANDBOX_ALLOW_KEYS, ...extra]);
+  const env: NodeJS.ProcessEnv = {};
+  for (const k of Object.keys(base)) {
+    if (allow.has(k)) env[k] = base[k];
   }
   return { ...env, ...providerEnv };
 }

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { readProjectState } from "@/lib/clients";
-import { commitProject } from "@/lib/git";
+import { commitProject, assertAllowedPushHost } from "@/lib/git";
 import { authError } from "@/lib/auth";
 
 export const runtime = "nodejs";
@@ -17,6 +17,14 @@ export async function POST(req: Request) {
   };
   if (!clientSlug || !projectSlug) {
     return NextResponse.json({ error: "缺少 clientSlug / projectSlug" }, { status: 400 });
+  }
+  // #1：目标仓库 host 白名单，非法 host 直接 400（不落到 push 逻辑）
+  if (repo) {
+    try {
+      assertAllowedPushHost(repo);
+    } catch (e) {
+      return NextResponse.json({ error: (e as Error).message }, { status: 400 });
+    }
   }
   const state = await readProjectState(clientSlug, projectSlug);
   if (!state) return NextResponse.json({ error: "项目不存在" }, { status: 404 });
