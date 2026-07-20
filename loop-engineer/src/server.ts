@@ -29,6 +29,7 @@ import { runTask } from "./orchestrator.js";
 import { isGitRepo } from "./git.js";
 import { checkWorkbenchToken } from "./auth.js";
 import { emitLifecycle } from "./lifecycle.js";
+import { createPool } from "./pool.js";
 import { installCallbackSink } from "./callback.js";
 import { log } from "./log.js";
 import type { Config, LoadedJob } from "./types.js";
@@ -64,31 +65,35 @@ function setState(rec: JobRecord, state: JobState, patch?: Partial<JobRecord>): 
   rec.updatedAt = new Date().toISOString();
 }
 
-// —— 单 worker 队列（引擎本身串行，这里按 jobId 排队）——
+// —— 有界并发池（W7）——
+// 契约 v2 · B1:v1 默认串行(LOOP_CONCURRENCY=1);一场 Mini 几十个想法可把并发调高。
+// 以 repo 作 key → 同 repo 的 job 串行(worktree/集成分支互斥)、跨 repo 并行。
 let config: Config;
-let workerBusy = false;
-const queue: string[] = [];
 
-function enqueue(jobId: string): void {
-  if (!queue.includes(jobId)) queue.push(jobId);
-  void pump();
+function maxConcurrency(): number {
+  const n = Number(process.env.LOOP_CONCURRENCY ?? 1);
+  return Number.isFinite(n) && n >= 1 ? Math.floor(n) : 1;
 }
 
-async function pump(): Promise<void> {
-  if (workerBusy) return;
-  const jobId = queue.shift();
-  if (!jobId) return;
-  workerBusy = true;
-  try {
-    await processJob(jobId);
-  } catch (e) {
-    const rec = registry.get(jobId);
-    if (rec) setState(rec, "failed", { error: (e as Error).message });
-    log.err(`job ${jobId} 处理异常：${(e as Error).message}`);
-  } finally {
-    workerBusy = false;
-    void pump();
-  }
+const pool = createPool(maxConcurrency);
+
+/** 提交一个 job 到并发池（以其 repo 为互斥 key）。 */
+function enqueue(jobId: string): void {
+  const rec = registry.get(jobId);
+  if (!rec) return;
+  pool.submit({
+    id: jobId,
+    key: rec.repo,
+    run: async () => {
+      try {
+        await processJob(jobId);
+      } catch (e) {
+        const r = registry.get(jobId);
+        if (r) setState(r, "failed", { error: (e as Error).message });
+        log.err(`job ${jobId} 处理异常：${(e as Error).message}`);
+      }
+    },
+  });
 }
 
 /** 跑一个 job 的全部待办任务到收工，实时更新 registry 状态。 */
@@ -320,16 +325,15 @@ async function handleRun(req: IncomingMessage, res: ServerResponse): Promise<voi
     return;
   }
   // 契约 v2 · B1：入队语义，返回 {accepted, jobId, queuePos}。queuePos=0 表示正在跑。
-  if (rec.state === "coding" || rec.state === "reviewing") {
+  if (pool.isRunning(jobId)) {
     send(res, 200, { accepted: true, jobId, queuePos: 0 });
     return;
   }
-  if (!queue.includes(jobId)) {
+  if (!pool.isActive(jobId)) {
     setState(rec, "queued");
     enqueue(jobId);
   }
-  const idx = queue.indexOf(jobId); // enqueue 后若空闲 worker 已同步 shift 走 → -1 → 正在跑
-  send(res, 200, { accepted: true, jobId, queuePos: idx < 0 ? 0 : idx + 1 });
+  send(res, 200, { accepted: true, jobId, queuePos: pool.queuePos(jobId) });
 }
 
 async function handleStatus(res: ServerResponse, jobId: string): Promise<void> {
