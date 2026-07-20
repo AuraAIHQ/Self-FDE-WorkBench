@@ -28,6 +28,7 @@ import { planSpec } from "./planner.js";
 import { runTask } from "./orchestrator.js";
 import { isGitRepo } from "./git.js";
 import { checkWorkbenchToken } from "./auth.js";
+import { emitLifecycle } from "./lifecycle.js";
 import { log } from "./log.js";
 import type { Config, LoadedJob } from "./types.js";
 
@@ -38,11 +39,20 @@ interface JobRecord {
   jobId: string;
   specDir: string;
   repo: string;
+  clientSlug: string;
+  projectSlug: string;
   state: JobState;
   prUrl?: string;
   appUrl?: string;
   error?: string;
   updatedAt: string;
+}
+
+/** 从规格目录反推 clientSlug/projectSlug（.../clients/<c>/projects/<p>） */
+function clientProjectFromSpecDir(specDir: string): { clientSlug: string; projectSlug: string } {
+  const projectSlug = path.basename(specDir);
+  const clientSlug = path.basename(path.dirname(path.dirname(specDir)));
+  return { clientSlug, projectSlug };
 }
 
 const registry = new Map<string, JobRecord>();
@@ -120,6 +130,15 @@ async function processJob(jobId: string): Promise<void> {
     });
   } else {
     setState(rec, "done");
+    // W4：coding 完成 → 广播 coding_done。部署归 hack5(只回调),此处不自部署。
+    // sink 失败不影响 job 状态(emitLifecycle 内部各 sink 独立 try/catch)。
+    await emitLifecycle({
+      event: "coding_done",
+      clientSlug: rec.clientSlug,
+      projectSlug: rec.projectSlug,
+      repo: rec.repo,
+      prUrl: rec.prUrl,
+    });
   }
 }
 
@@ -201,10 +220,13 @@ async function findJobRecord(jobId: string): Promise<JobRecord | undefined> {
   const jobs = await scanJobs(config.watchDirs);
   const job = jobs.find((j) => j.manifest.id === jobId);
   if (!job) return undefined;
+  const { clientSlug, projectSlug } = clientProjectFromSpecDir(job.jobDir);
   const rec: JobRecord = {
     jobId,
     specDir: job.jobDir,
     repo: job.manifest.repo,
+    clientSlug,
+    projectSlug,
     state: deriveState(job),
     updatedAt: new Date().toISOString(),
   };
@@ -250,6 +272,8 @@ async function handlePlan(req: IncomingMessage, res: ServerResponse): Promise<vo
     jobId: projectSlug,
     specDir,
     repo,
+    clientSlug,
+    projectSlug,
     state: "planning",
     updatedAt: new Date().toISOString(),
   };
@@ -269,7 +293,15 @@ async function handlePlan(req: IncomingMessage, res: ServerResponse): Promise<vo
   if (jobId !== provisional.jobId) {
     registry.delete(provisional.jobId);
   }
-  const rec: JobRecord = { jobId, specDir, repo, state: "queued", updatedAt: new Date().toISOString() };
+  const rec: JobRecord = {
+    jobId,
+    specDir,
+    repo,
+    clientSlug,
+    projectSlug,
+    state: "queued",
+    updatedAt: new Date().toISOString(),
+  };
   registry.set(jobId, rec);
   send(res, 200, { jobId });
 }
