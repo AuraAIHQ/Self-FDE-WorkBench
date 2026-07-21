@@ -25,10 +25,19 @@ function makeCanUseTool(root: string): CanUseTool {
     MultiEdit: "file_path",
     NotebookEdit: "notebook_path",
   };
+  // A 方案「快 chat」：默认关掉 WebSearch —— 每轮联网调研是最大耗时/耗轮次来源，
+  // 会把单轮拖到分钟级（hack5 的 CF Worker 同步 fetch 扛不住）。追问式对话本就该秒回，
+  // 深度调研留到后面 loop 阶段。设 CHAT_WEBSEARCH=true 可恢复。
+  const webSearchEnabled = process.env.CHAT_WEBSEARCH === "true";
   return async (toolName, input) => {
     if (process.env.CANUSE_DEBUG) console.error(`[canUseTool] ${toolName}`);
     if (toolName.startsWith("mcp__workbench__")) return { behavior: "allow", updatedInput: input };
-    if (toolName === "WebSearch" || toolName === "TodoWrite") {
+    if (toolName === "WebSearch") {
+      return webSearchEnabled
+        ? { behavior: "allow", updatedInput: input }
+        : { behavior: "deny", message: "快 chat 模式已关闭 WebSearch（设 CHAT_WEBSEARCH=true 恢复）" };
+    }
+    if (toolName === "TodoWrite") {
       return { behavior: "allow", updatedInput: input };
     }
     if (toolName in PATH_KEY) {
@@ -48,8 +57,11 @@ function makeCanUseTool(root: string): CanUseTool {
 }
 
 async function loadSystemPrompt(): Promise<string> {
-  const p = path.join(process.cwd(), "prompts", "system.md");
-  return fs.readFile(p, "utf8");
+  // A 方案「快 chat」：默认用轻量 intake 提示（每轮只小改 SPEC.md + GAPS.md、不联网、不写 6 文档），
+  // 把单轮压到秒级以适配 hack5 的 Cloudflare Worker 同步 fetch（45s 超时）。
+  // 设 CHAT_FULL_SPEC=true 可切回完整 6 文档规格生成模式（分钟级，仅适合本地/异步场景）。
+  const file = process.env.CHAT_FULL_SPEC === "true" ? "system.md" : "system-fast.md";
+  return fs.readFile(path.join(process.cwd(), "prompts", file), "utf8");
 }
 
 // —— submit_turn：agent 每轮结束必须调用一次，把结构化结果交回网页 ——
@@ -83,6 +95,11 @@ function buildSubmitTool(sink: { value: TurnResult | null }) {
         missing: z.array(z.string()).describe("还差哪些才 loop-ready"),
       }),
       updated_docs: z.array(z.string()).describe("本轮更新过的文档文件名"),
+      // 快 chat（单次调用）模式：模型不碰文件工具，把更新后的完整 SPEC.md 内容放这里，server 负责保存。
+      spec_markdown: z
+        .string()
+        .optional()
+        .describe("更新后的完整 SPEC.md 全文（快 chat 模式必填；server 会写盘）"),
     },
     async (args) => {
       sink.value = args as TurnResult;
@@ -146,6 +163,24 @@ export async function runTurn(input: RunTurnInput): Promise<RunTurnOutput> {
     ? `## 本项目的交付物（右栏以此为中心，所有规格都服务于产出它）\n名称：${project.deliverable.name}\n类型：${project.deliverable.type}`
     : "";
 
+  // A 方案「快 chat」（默认）：单次调用——不给文件工具，把当前 SPEC.md 塞进 prompt，
+  // 模型一次性产出「更新后的完整 SPEC.md + 回复」经 submit_turn 交回，server 写盘。
+  // 这样只有 1 个模型往返，延迟可预测（避免 agentic 循环自主多轮读写导致的耗时抖动）。
+  const fastMode = process.env.CHAT_FULL_SPEC !== "true";
+  let specContent = "";
+  if (fastMode) {
+    specContent = await fs.readFile(path.join(dir, "SPEC.md"), "utf8").catch(() => "");
+  }
+
+  const taskBlock = fastMode
+    ? `## 当前 SPEC.md 全文（就是下面这段，你要在此基础上更新；不要用任何文件工具，全靠这段做增量）
+${specContent ? "```markdown\n" + specContent + "\n```" : "（SPEC.md 尚为空，请写一份精简初稿）"}
+
+## 你的任务（快 chat 单次调用）
+结合**客户背景**、**交付物目标**、**最近对话**，把客户本轮新输入并进 SPEC.md。**你没有文件读写工具**——把更新后的**完整 SPEC.md 全文**放进 \`mcp__workbench__submit_turn\` 的 \`spec_markdown\` 字段（server 会替你写盘），同时给出简短 reply、最关键的问题、readiness。**只调用 submit_turn 恰好一次，这是你唯一的动作。**`
+    : `## 你的任务
+按 system prompt 的流程处理这轮输入：结合上面的**客户背景**与**交付物目标**，读现状 → 融合更新当前目录下的 spec 文档 → 检缺口 → 能查的自己查、只有客户知道的抛问题 → 评估 readiness → 最后调用 mcp__workbench__submit_turn 恰好一次。`;
+
   const prompt = `${clientContext}
 
 ${deliverableContext}
@@ -156,10 +191,10 @@ ${recentContext(history)}
 ## 客户本轮新输入
 ${input.customerInput}${attachNote}
 
-## 你的任务
-按 system prompt 的流程处理这轮输入：结合上面的**客户背景**与**交付物目标**，读现状 → 融合更新当前目录下的 spec 文档 → 检缺口 → 能查的自己查、只有客户知道的抛问题 → 评估 readiness → 最后调用 mcp__workbench__submit_turn 恰好一次。`;
+${taskBlock}`;
 
-  const maxTurns = Number(process.env.AGENT_MAX_TURNS ?? 40);
+  // 快 chat 只需模型 1 次调 submit_turn（给一点余量应对思考轮）；完整模式沿用大 maxTurns。
+  const maxTurns = Number(process.env.AGENT_MAX_TURNS ?? (fastMode ? 4 : 40));
   const model = process.env.CLAUDE_MODEL || undefined;
 
   let rawText = "";
@@ -172,9 +207,32 @@ ${input.customerInput}${attachNote}
       model,
       mcpServers: { workbench: submitServer },
       // 关键：文件/搜索工具「不」放进 allowedTools——放进去会被免问放行、绕过 canUseTool。
-      // 只免问放行确定安全的 WebSearch 与自有 MCP 工具；Read/Write/Edit/Glob/Grep 一律
-      // 落到 canUseTool 逐次校验路径。WebFetch 既不放行也会被 canUseTool 默认拒绝（SSRF）。
-      allowedTools: ["WebSearch", "mcp__workbench__submit_turn"],
+      // 只免问放行自有 MCP 工具；Read/Write/Edit/Glob/Grep 一律落到 canUseTool 逐次校验路径。
+      // WebSearch 仅在 CHAT_WEBSEARCH=true 时放行（默认关，见 makeCanUseTool 的「快 chat」注释）。
+      // WebFetch 既不放行也会被 canUseTool 默认拒绝（SSRF）。
+      allowedTools:
+        process.env.CHAT_WEBSEARCH === "true"
+          ? ["WebSearch", "mcp__workbench__submit_turn"]
+          : ["mcp__workbench__submit_turn"],
+      // 快 chat：硬禁所有文件/搜索/命令工具，逼模型只用 submit_turn（单次调用、延迟可预测）。
+      // 完整模式不禁，让 agent 就地读写 6 文档。
+      ...(fastMode
+        ? {
+            disallowedTools: [
+              "Read",
+              "Write",
+              "Edit",
+              "MultiEdit",
+              "NotebookEdit",
+              "Glob",
+              "Grep",
+              "Bash",
+              "WebSearch",
+              "WebFetch",
+              "TodoWrite",
+            ],
+          }
+        : {}),
       // 不加载大 repo 的 CLAUDE.md / 项目设置，保持每个客户会话隔离
       settingSources: [],
       // 不再 bypass；default + canUseTool 硬性约束路径，防越界写/读与 SSRF
@@ -205,6 +263,16 @@ ${input.customerInput}${attachNote}
   }
 
   if (sink.value) {
+    // 快 chat：模型不碰文件工具，由 server 把 spec_markdown 写进 SPEC.md。
+    if (fastMode && typeof sink.value.spec_markdown === "string" && sink.value.spec_markdown.trim()) {
+      const body = sink.value.spec_markdown.endsWith("\n")
+        ? sink.value.spec_markdown
+        : sink.value.spec_markdown + "\n";
+      await fs.writeFile(path.join(dir, "SPEC.md"), body, "utf8");
+      if (!sink.value.updated_docs?.includes("SPEC.md")) {
+        sink.value.updated_docs = [...(sink.value.updated_docs ?? []), "SPEC.md"];
+      }
+    }
     return { result: sink.value, usedFallback: false, rawText, usage };
   }
 
