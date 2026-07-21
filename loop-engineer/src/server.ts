@@ -29,7 +29,7 @@ import { runTask } from "./orchestrator.js";
 import { isGitRepo, pruneWorktrees, isRemoteRepo, ensureClone, pushRefs } from "./git.js";
 import { runWithTimeout } from "./timeout.js";
 import { writeStatus, readStatus } from "./persist.js";
-import { checkWorkbenchToken } from "./auth.js";
+import { checkWorkbenchToken, checkOrigin } from "./auth.js";
 import { emitLifecycle } from "./lifecycle.js";
 import { createPool } from "./pool.js";
 import { installCallbackSink } from "./callback.js";
@@ -453,6 +453,11 @@ async function handleStatus(res: ServerResponse, jobId: string): Promise<void> {
 }
 
 async function router(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  // B3：授权 origin 门禁（带 Origin 的浏览器跨站请求须落白名单；服务端调用无 Origin 放行）。
+  if (!checkOrigin(req)) {
+    send(res, 403, { error: "forbidden：origin 未授权" });
+    return;
+  }
   if (!checkWorkbenchToken(req)) {
     send(res, 401, { error: "未授权：需要有效的 x-workbench-token" });
     return;
