@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { readProjectState, writeProjectState, appendConversation } from "@/lib/clients";
 import { runTurn } from "@/lib/agent";
 import { commitProject, type CommitResult } from "@/lib/git";
-import { scopedAuthError } from "@/lib/auth";
+import { scopedAuthError, originError } from "@/lib/auth";
 import { addUsage, ZERO_USAGE } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -10,6 +10,11 @@ export const runtime = "nodejs";
 export const maxDuration = 800;
 
 export async function POST(req: Request) {
+  // B3：origin 门禁抢在 body 解析之前（scopedAuthError 需 body 里的 client/project，排在后面；
+  // 未授权域不该先进到 body 校验拿 400）。
+  const oe = originError(req);
+  if (oe) return oe;
+
   const { clientSlug, projectSlug, input, attachments } = (await req.json()) as {
     clientSlug?: string;
     projectSlug?: string;

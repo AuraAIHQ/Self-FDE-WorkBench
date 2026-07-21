@@ -10,6 +10,47 @@ function safeEqual(a: string, b: string): boolean {
 }
 
 /**
+ * 授权 origin 白名单（B3 补强）。默认放行本机 UI（workbench.aastar.io）+ 授权合作方
+ * hack5.net(含子域) + 本地开发。可用 WORKBENCH_ALLOWED_ORIGINS（逗号分隔 host）覆盖。
+ * 条目容忍写成完整 URL / 带端口，统一取 hostname 小写比对。
+ */
+function allowedOrigins(): string[] {
+  const raw = process.env.WORKBENCH_ALLOWED_ORIGINS?.trim();
+  const defaults = "workbench.aastar.io,hack5.net,localhost,127.0.0.1";
+  return (raw || defaults)
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean)
+    .map((s) => s.replace(/^https?:\/\//, "").replace(/[:/].*$/, "")); // 容忍 URL/端口
+}
+
+/** Origin header 的 host 是否在白名单（精确 host 或其子域）。 */
+export function originAllowed(originHeader: string): boolean {
+  let hostname: string;
+  try {
+    hostname = new URL(originHeader).hostname.toLowerCase();
+  } catch {
+    return false; // Origin 存在但不可解析 → 拒
+  }
+  return allowedOrigins().some((a) => hostname === a || hostname.endsWith("." + a));
+}
+
+/**
+ * 授权 origin 门禁（B3）。**只对带 Origin 的请求生效**——浏览器跨站请求会带 Origin，
+ * 不在白名单的域（"不是我的应用"）一律 403；hack5 的 Worker 是服务端调用、**无 Origin**，
+ * 放行去走 token 门禁（其真正的准入凭据是只有 hack5 持有的共享密钥）。
+ * 由 authError / scopedAuthError 在最前面调用，覆盖所有 API route。
+ */
+export function originError(req: Request): NextResponse | null {
+  const origin = req.headers.get("origin");
+  if (!origin) return null; // 无 Origin = 服务端调用（hack5 Worker）→ 交给 token 门禁
+  if (!originAllowed(origin)) {
+    return NextResponse.json({ error: "forbidden：origin 未授权" }, { status: 403 });
+  }
+  return null;
+}
+
+/**
  * 最小鉴权（admin / 编排层）：若设了 WORKBENCH_TOKEN，则所有 API 需带 `x-workbench-token`
  * 匹配头，否则 401。未设 token 时视为「仅本机使用」——配合默认 bind 127.0.0.1。
  * 面向公网/无人值守部署务必设置 WORKBENCH_TOKEN。
@@ -18,6 +59,8 @@ function safeEqual(a: string, b: string): boolean {
  * 参赛者会话（chat / 读自己项目）走 scopedAuthError（作用域 token）。
  */
 export function authError(req: Request): NextResponse | null {
+  const oe = originError(req);
+  if (oe) return oe;
   const token = process.env.WORKBENCH_TOKEN?.trim();
   if (!token) return null;
   const got = req.headers.get("x-workbench-token");
@@ -78,6 +121,8 @@ export function scopedAuthError(
   clientSlug: string,
   projectSlug: string,
 ): NextResponse | null {
+  const oe = originError(req);
+  if (oe) return oe;
   const admin = process.env.WORKBENCH_TOKEN?.trim();
   const secret = process.env.WORKBENCH_SCOPED_SECRET?.trim();
   // 都没配 → 仅本机使用，放行（与 authError 语义一致）
