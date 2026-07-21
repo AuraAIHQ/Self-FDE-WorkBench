@@ -50,6 +50,8 @@ interface JobRecord {
   appUrl?: string;
   error?: string;
   updatedAt: string;
+  /** B1：/plan 入队时置 true —— 后台 job 先跑 planSpec(拆规格)再跑任务,避免 /plan 同步阻塞。 */
+  needsPlan?: boolean;
 }
 
 /** 从规格目录反推 clientSlug/projectSlug（.../clients/<c>/projects/<p>） */
@@ -109,7 +111,17 @@ function enqueue(jobId: string): void {
     key: rec.repo,
     run: async () => {
       // Q2:job 级超时。超时 → abort（kill 子进程 + runTask.finally 清 worktree）→ 标 failed。
-      const r = await runWithTimeout((signal) => processJob(jobId, signal), jobTimeoutMs());
+      const r = await runWithTimeout(async (signal) => {
+        // B1：/plan 只入队秒返回,真正的拆规格(planSpec,分钟级)在这里后台跑,不阻塞 HTTP。
+        const r0 = registry.get(jobId);
+        if (r0?.needsPlan) {
+          setState(r0, "planning");
+          await planSpec(r0.specDir, config, { repo: r0.repo });
+          r0.needsPlan = false;
+        }
+        if (signal?.aborted) return;
+        await processJob(jobId, signal);
+      }, jobTimeoutMs());
       const job = registry.get(jobId);
       if (r.timedOut) {
         if (job) setState(job, "failed", { error: `job 超时（${jobTimeoutMs()}ms），已中止并清理` });
@@ -342,42 +354,23 @@ async function handlePlan(req: IncomingMessage, res: ServerResponse): Promise<vo
     return;
   }
 
-  // 临时占位 record（jobId 先用 projectSlug；planSpec 后以 manifest.id 为准）
-  const provisional: JobRecord = {
-    jobId: projectSlug,
-    specDir,
-    repo,
-    clientSlug,
-    projectSlug,
-    state: "planning",
-    updatedAt: new Date().toISOString(),
-  };
-  registry.set(provisional.jobId, provisional);
-
-  try {
-    await planSpec(specDir, config, { repo });
-  } catch (e) {
-    setState(provisional, "failed", { error: (e as Error).message });
-    send(res, 500, { error: `plan 失败：${(e as Error).message}` });
-    return;
-  }
-
-  // 读回 loop.json 拿真实 jobId（= manifest.id）
-  const job = await loadJob(path.join(specDir, "loop.json"));
-  const jobId = job?.manifest.id ?? projectSlug;
-  if (jobId !== provisional.jobId) {
-    registry.delete(provisional.jobId);
-  }
+  // B1：/plan 入队秒返回,不同步跑 planSpec（planner 分钟级,会让 hack5 的 CF Worker 超时 502）。
+  // jobId 确定可复现 = projectSlug（manifest.id = basename(specDir) = projectSlug）。
+  // 真正的拆规格 planSpec 由后台 job 先跑(needsPlan),再跑任务闭环,进度/结果走 /status + 回调。
+  const jobId = projectSlug;
   const rec: JobRecord = {
     jobId,
     specDir,
     repo,
     clientSlug,
     projectSlug,
-    state: "queued",
+    state: "planning",
+    needsPlan: true,
     updatedAt: new Date().toISOString(),
   };
   registry.set(jobId, rec);
+  void persist(rec);
+  enqueue(jobId); // 后台:planSpec → 任务闭环
   send(res, 200, { jobId });
 }
 
