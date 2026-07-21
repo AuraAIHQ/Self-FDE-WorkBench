@@ -4,9 +4,9 @@
   "pollIntervalMs": 15000,
   "maxAttempts": 3,
   "providers": {
-    "planner": "claude",
+    "planner": "hilinkup:glm-5.2",
     "coder": "deepseek",
     "reviewer": "hilinkup:kimi-k2.5"
   },
-  "notes": "provider 必须与 .env 中实际存在的 key 对齐:coder 需 Anthropic 兼容端点(claude 订阅/deepseek 直连),reviewer 可走 hilinkup(OpenAI 兼容,一 key 多模型)。把 coder/reviewer 改成 'mock' 可无 key 本地跑通编排。若日后配了 GLM_API_KEY/KIMI_API_KEY 可改回 glm/kimi。watchDirs 下任意含 loop.json 且有 todo 任务的目录会被当作 job。"
+  "notes": "纯云配置(HiLinkup 主力 + DeepSeek):planner/reviewer 走 HiLinkup(OpenAI 兼容,一 key 多模型);coder 必须 Anthropic 兼容端点(HiLinkup 驱动不了 agentic claude -p),用 deepseek(api.deepseek.com/anthropic)。要用本机 claude 订阅可把某角色改回 'claude';无 key 本地跑通编排可改 'mock'。watchDirs 下任意含 loop.json 且有 todo 任务的目录会被当作 job。"
 }
