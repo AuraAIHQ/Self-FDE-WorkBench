@@ -8,8 +8,10 @@
  * 契约（见 docs/hack5-对接-实现计划.md §1）：
  *   POST /plan      { clientSlug, projectSlug, repo } → { jobId }
  *   POST /run       { jobId }                         → { started, state }
- *   GET  /status/:jobId  → { state, progress{total,done,percent,current}, tasks[], prUrl?, appUrl? }
+ *   GET  /status/:jobId  → { state, progress{total,done,percent,current}, tasks[], costUsd, prUrl?, appUrl? }
  *   GET  /spec/:jobId    → { spec, docs{}, tasks[] }  —— 正在基于哪些规格开发 + 任务清单
+ *   POST /deploy         { clientSlug, projectSlug, repo } → { appUrl, expiresAt, selfDeployHint }
+ *                        —— 一键部署作品仓到 CF Pages(内置账号),7 天自动删,发 deployed 回调
  *
  * 鉴权：所有端点校验 `x-workbench-token`（复用 WORKBENCH_TOKEN，与 fde-copilot 一致）。
  *
@@ -22,6 +24,7 @@
 import { createServer } from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
+import os from "node:os";
 import { promises as fs } from "node:fs";
 import { loadConfig, loadEnv, PROJECT_ROOT } from "./config.js";
 import { loadJob, nextTask, hasPending, saveJob, scanJobs } from "./jobs.js";
@@ -34,6 +37,7 @@ import { checkWorkbenchToken, checkOrigin } from "./auth.js";
 import { emitLifecycle } from "./lifecycle.js";
 import { createPool } from "./pool.js";
 import { installCallbackSink } from "./callback.js";
+import { cfCreds, deployStaticDir, cleanupExpiredPages } from "./deploy.js";
 import { log } from "./log.js";
 import { ZERO, add } from "./usage.js";
 import type { Usage } from "./usage.js";
@@ -560,6 +564,51 @@ async function handleSpec(res: ServerResponse, jobId: string): Promise<void> {
   });
 }
 
+/**
+ * POST /deploy { clientSlug, projectSlug, repo } → { appUrl, expiresAt, selfDeployHint }
+ * 参赛者「一键部署」：clone 作品仓 → 部署到 CF Pages(内置账号)→ 发 deployed 回调 → 7 天自动删。
+ */
+async function handleDeploy(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const body = await readJson(req);
+  const clientSlug = String(body.clientSlug ?? "");
+  const projectSlug = String(body.projectSlug ?? "");
+  const repo = String(body.repo ?? "");
+  if (!clientSlug || !projectSlug || !repo) {
+    send(res, 400, { error: "缺少 clientSlug / projectSlug / repo" });
+    return;
+  }
+  try {
+    assertSafeSlug(clientSlug, "clientSlug");
+    assertSafeSlug(projectSlug, "projectSlug");
+    assertSafeRepo(repo);
+  } catch (e) {
+    send(res, 400, { error: (e as Error).message });
+    return;
+  }
+  if (!isRemoteRepo(repo)) {
+    send(res, 400, { error: "部署仅支持远程 GitHub 仓" });
+    return;
+  }
+  const cf = cfCreds();
+  if (!cf) {
+    send(res, 501, { error: "未配置 CF Pages 部署凭据(PAGES_CF_TOKEN_THAI_TEA / THAI_TEA_CLIENT_ID)" });
+    return;
+  }
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "wb-deploy-"));
+  try {
+    await ensureClone(repo, path.join(tmp, "repo"), "main", loopPushToken());
+    const result = await deployStaticDir(path.join(tmp, "repo"), clientSlug, projectSlug, cf);
+    // 发 deployed 回调(带 appUrl),hack5 翻徽章 + 展示在线链接
+    await emitLifecycle({ event: "deployed", clientSlug, projectSlug, repo, appUrl: result.appUrl });
+    send(res, 200, result);
+  } catch (e) {
+    log.err(`部署失败(${clientSlug}/${projectSlug})：${(e as Error).message}`);
+    send(res, 500, { error: `部署失败：${(e as Error).message}` });
+  } finally {
+    await fs.rm(tmp, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
 async function router(req: IncomingMessage, res: ServerResponse): Promise<void> {
   // B3：授权 origin 门禁（带 Origin 的浏览器跨站请求须落白名单；服务端调用无 Origin 放行）。
   if (!checkOrigin(req)) {
@@ -574,6 +623,7 @@ async function router(req: IncomingMessage, res: ServerResponse): Promise<void> 
   const p = url.pathname;
   if (req.method === "POST" && p === "/plan") return handlePlan(req, res);
   if (req.method === "POST" && p === "/run") return handleRun(req, res);
+  if (req.method === "POST" && p === "/deploy") return handleDeploy(req, res);
   if (req.method === "GET" && p.startsWith("/status/")) {
     return handleStatus(res, decodeURIComponent(p.slice("/status/".length)));
   }
@@ -586,6 +636,14 @@ async function router(req: IncomingMessage, res: ServerResponse): Promise<void> 
 export async function startServer(port: number, host: string): Promise<void> {
   config = await loadConfig();
   installCallbackSink(); // W5：把 HMAC 签名回调挂到 lifecycle（coding_done 等事件外发给 hack5）
+
+  // 一键部署的 7 天自动清理：每 6h 扫一次删过期 wb-* Pages 项目;启动 60s 后先跑一次。
+  if (cfCreds()) {
+    const runCleanup = () =>
+      cleanupExpiredPages(7).catch((e) => log.warn(`Pages 清理失败：${(e as Error).message}`));
+    setInterval(runCleanup, 6 * 60 * 60 * 1000).unref();
+    setTimeout(runCleanup, 60_000).unref();
+  }
   const server = createServer((req, res) => {
     router(req, res).catch((e) => {
       log.err(`请求处理异常：${(e as Error).message}`);
