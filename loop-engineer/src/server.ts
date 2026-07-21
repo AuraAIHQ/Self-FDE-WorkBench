@@ -8,7 +8,8 @@
  * 契约（见 docs/hack5-对接-实现计划.md §1）：
  *   POST /plan      { clientSlug, projectSlug, repo } → { jobId }
  *   POST /run       { jobId }                         → { started, state }
- *   GET  /status/:jobId                               → { state, prUrl?, appUrl? }
+ *   GET  /status/:jobId  → { state, progress{total,done,percent,current}, tasks[], prUrl?, appUrl? }
+ *   GET  /spec/:jobId    → { spec, docs{}, tasks[] }  —— 正在基于哪些规格开发 + 任务清单
  *
  * 鉴权：所有端点校验 `x-workbench-token`（复用 WORKBENCH_TOKEN，与 fde-copilot 一致）。
  *
@@ -131,6 +132,19 @@ function enqueue(jobId: string): void {
         if (job) setState(job, "failed", { error: (r.error as Error).message });
         log.err(`job ${jobId} 处理异常：${(r.error as Error).message}`);
       }
+      // 统一失败回调：不论 job 是任务失败(processJob 内置 failed)、超时还是异常收尾，
+      // 只要终态为 failed 就发一次 failed 回调 —— 否则 hack5 会一直干等 build。coding_done
+      // 由 processJob 成功路径自己发，这里只兜底 failed，不会重复。
+      const fin = registry.get(jobId);
+      if (fin && fin.state === "failed") {
+        await emitLifecycle({
+          event: "failed",
+          clientSlug: fin.clientSlug,
+          projectSlug: fin.projectSlug,
+          repo: fin.repo,
+          error: fin.error,
+        });
+      }
     },
   });
 }
@@ -144,10 +158,11 @@ function loopPushToken(): string | undefined {
   return process.env.LOOP_GIT_PUSH_TOKEN || process.env.GITHUB_BOT_TOKEN || undefined;
 }
 
-/** job 级超时上限（默认 30min，契约 v2 · Q2 建议值）。 */
+/** job 级超时上限（默认 60min）。多任务应用(骨架+逐个功能+返工)30min 常不够，放宽到 60min。 */
 function jobTimeoutMs(): number {
-  const n = Number(process.env.LOOP_JOB_TIMEOUT_MS ?? 30 * 60 * 1000);
-  return Number.isFinite(n) && n > 0 ? n : 30 * 60 * 1000;
+  const DEFAULT = 60 * 60 * 1000;
+  const n = Number(process.env.LOOP_JOB_TIMEOUT_MS ?? DEFAULT);
+  return Number.isFinite(n) && n > 0 ? n : DEFAULT;
 }
 
 /** 超时/失败后清理该 repo 遗留的半成品 worktree（尽力而为）。 */
@@ -438,17 +453,90 @@ async function handleRun(req: IncomingMessage, res: ServerResponse): Promise<voi
   send(res, 200, { accepted: true, jobId, queuePos: pool.queuePos(jobId) });
 }
 
+/** fde-copilot 产出的规格文档集（供 /spec 输出：hack5/作品墙可看「基于哪些规格在开发」）。 */
+const SPEC_DOC_FILES = ["SPEC.md", "PRODUCT.md", "FEATURES.md", "TECH_SPEC.md", "INTERACTIONS.md", "GAPS.md"];
+
+/** 从 loop.json 算任务级进度（总数/已完成/百分比/当前任务/任务清单）。未拆规格返回 null。 */
+async function jobProgress(specDir: string): Promise<{
+  total: number;
+  done: number;
+  percent: number;
+  current: { id: string; title: string; status: string; attempts: number } | null;
+  tasks: Array<{ id: string; title: string; status: string }>;
+} | null> {
+  const job = await loadJob(path.join(specDir, "loop.json"));
+  if (!job || job.manifest.tasks.length === 0) return null;
+  const tasks = job.manifest.tasks;
+  const done = tasks.filter((t) => t.status === "done").length;
+  const cur =
+    tasks.find((t) => t.status === "in_progress") ?? tasks.find((t) => t.status === "todo") ?? null;
+  return {
+    total: tasks.length,
+    done,
+    percent: Math.round((done / tasks.length) * 100),
+    current: cur ? { id: cur.id, title: cur.title, status: cur.status, attempts: cur.attempts } : null,
+    tasks: tasks.map((t) => ({ id: t.id, title: t.title, status: t.status })),
+  };
+}
+
 async function handleStatus(res: ServerResponse, jobId: string): Promise<void> {
   const rec = await findJobRecord(jobId);
   if (!rec) {
     send(res, 404, { error: `job 不存在：${jobId}` });
     return;
   }
+  // 任务级进度：让调用方(hack5/作品墙)看到「几个任务、做到第几个、百分比」而非只有粗状态。
+  const progress = await jobProgress(rec.specDir).catch(() => null);
   send(res, 200, {
     state: rec.state,
+    ...(progress
+      ? {
+          progress: {
+            total: progress.total,
+            done: progress.done,
+            percent: progress.percent,
+            current: progress.current,
+          },
+          tasks: progress.tasks,
+        }
+      : {}),
     ...(rec.prUrl ? { prUrl: rec.prUrl } : {}),
     ...(rec.appUrl ? { appUrl: rec.appUrl } : {}),
     ...(rec.error ? { error: rec.error } : {}),
+  });
+}
+
+/**
+ * GET /spec/:jobId —— 输出该 job 正在基于哪些规格文档开发（SPEC.md 全文 + 其它规格文档 +
+ * planner 拆出的任务清单）。让 hack5/作品墙能展示「AI 基于这份规格在做，做到哪一步」。
+ */
+async function handleSpec(res: ServerResponse, jobId: string): Promise<void> {
+  const rec = await findJobRecord(jobId);
+  if (!rec) {
+    send(res, 404, { error: `job 不存在：${jobId}` });
+    return;
+  }
+  const docs: Record<string, string> = {};
+  for (const f of SPEC_DOC_FILES) {
+    try {
+      docs[f] = await fs.readFile(path.join(rec.specDir, f), "utf8");
+    } catch {
+      /* 缺文件跳过 */
+    }
+  }
+  const job = await loadJob(path.join(rec.specDir, "loop.json")).catch(() => null);
+  send(res, 200, {
+    spec: docs["SPEC.md"] ?? "",
+    docs,
+    tasks:
+      job?.manifest.tasks.map((t) => ({
+        id: t.id,
+        title: t.title,
+        spec: t.spec,
+        acceptance: t.acceptance,
+        status: t.status,
+        dependsOn: t.dependsOn,
+      })) ?? [],
   });
 }
 
@@ -468,6 +556,9 @@ async function router(req: IncomingMessage, res: ServerResponse): Promise<void> 
   if (req.method === "POST" && p === "/run") return handleRun(req, res);
   if (req.method === "GET" && p.startsWith("/status/")) {
     return handleStatus(res, decodeURIComponent(p.slice("/status/".length)));
+  }
+  if (req.method === "GET" && p.startsWith("/spec/")) {
+    return handleSpec(res, decodeURIComponent(p.slice("/spec/".length)));
   }
   send(res, 404, { error: "未知路由" });
 }

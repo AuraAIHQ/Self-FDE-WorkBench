@@ -10,7 +10,7 @@ import { log } from "./log.js";
  * 事件的实际外发(HMAC 签名回调 + 重试 + 幂等)是 W5 —— W5 只需 registerLifecycleSink() 挂一个
  * webhook sink,不改这里。若未来真要 WorkBench 自部署,也只是再挂一个 deploy sink,接缝不变。
  */
-export type LifecycleEventName = "loop_ready" | "coding_done" | "deployed";
+export type LifecycleEventName = "loop_ready" | "coding_done" | "deployed" | "failed";
 
 export interface LifecycleEvent {
   event: LifecycleEventName;
@@ -19,6 +19,8 @@ export interface LifecycleEvent {
   repo: string;
   prUrl?: string;
   appUrl?: string;
+  /** failed 事件的错误摘要（供 hack5 展示/记录；其它事件不带）。 */
+  error?: string;
 }
 
 export type LifecycleSink = (evt: LifecycleEvent) => void | Promise<void>;

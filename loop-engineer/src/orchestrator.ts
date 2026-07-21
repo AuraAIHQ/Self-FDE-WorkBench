@@ -197,11 +197,26 @@ export async function runTask(
         log.info(`  ${r.tag}评审（${r.provider.name}）`);
         // 解析重试：评审输出非 JSON 只是模型格式抖动，重试评审而非返工重编（省 token、防误判）
         let verdict: ReviewVerdict | null = null;
+        let reviewErr: Error | null = null;
         for (let ri = 1; ri <= 2 && !verdict; ri++) {
-          verdict = extractJson<ReviewVerdict>(await callReviewer(r));
+          try {
+            verdict = extractJson<ReviewVerdict>(await callReviewer(r));
+          } catch (e) {
+            // 评审模型瞬时故障（如 HiLinkup 524 / 网络）——不是代码问题，别重试解析
+            if (hooks?.signal?.aborted) throw e; // job 超时的 abort 要如实失败，不放行
+            reviewErr = e as Error;
+            break;
+          }
           if (!verdict && ri < 2) log.warn(`  ${r.tag}评审输出非 JSON，重试解析(${ri}/2)`);
         }
 
+        if (reviewErr) {
+          // 评审模型调用失败（gate 已过、代码已写出）：别因「审不成」就判整个任务/ job 失败 →
+          // 保守放行本层（与「裁决无法解析」同策）。真有质量问题留给外层 reviewer / 后续迭代。
+          log.warn(`  ${r.tag}评审模型调用失败(${reviewErr.message.slice(0, 80)})，gate 已过→保守放行本层`);
+          await appendJournal(job, task.id, `⚠ ${r.tag}评审模型故障(${reviewErr.message.slice(0, 60)})→放行`);
+          continue;
+        }
         if (!verdict) {
           // 两次都拿不到可解析裁决：保守放行本层（gate 已过），避免格式问题空转返工
           log.warn(`  ${r.tag}评审两次均无法解析，gate 已过，保守放行本层`);
