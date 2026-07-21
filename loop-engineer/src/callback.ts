@@ -45,6 +45,7 @@ export function callbackBody(evt: LifecycleEvent): string {
     repo: evt.repo,
     ...(evt.appUrl ? { appUrl: evt.appUrl } : {}),
     ...(evt.prUrl ? { prUrl: evt.prUrl } : {}),
+    ...(evt.error ? { error: evt.error } : {}),
     id: idempotencyKey(evt),
   });
 }
