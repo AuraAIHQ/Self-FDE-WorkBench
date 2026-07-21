@@ -43,20 +43,29 @@ interface PlanOut {
  * 读 specDir 下的 loop-ready 规格，用 planner 供应商拆成任务，写/并入 specDir/loop.json。
  * 已存在的同 id 任务保留其 status（不重置进度）。
  */
-/** 用一个 provider 跑一次拆规格,返回 {可解析的 PlanOut 或 null, 本次用量}。调用失败会 throw。 */
+const STRICT_JSON_HINT =
+  "\n\n【重要】上一轮没有严格只输出可解析的 JSON。请只输出一个 JSON 对象(第一个字符就是 {)," +
+  "含 tasks 数组(每项 id/title/spec/acceptance/files/dependsOn)与可选 skipped,不要任何解释文字或 markdown 代码围栏。";
+
+/**
+ * 用一个 provider 跑一次拆规格,返回 {可解析的 PlanOut 或 null, 本次用量}。调用失败会 throw。
+ * strict=true 时在提示词后追加「严格只输出 JSON」指令(供同一 provider 解析失败后的重试)。
+ */
 async function callPlanner(
   providerName: string,
   tpl: string,
   specDir: string,
+  strict = false,
 ): Promise<{ plan: PlanOut | null; usage: Usage }> {
   const planner = resolveProvider(providerName);
+  const prompt = strict ? tpl + STRICT_JSON_HINT : tpl;
   let res;
   if (planner.kind === "openai-chat") {
     // 单发 chat：无 Read 工具，自己把规格文档拼进去
     const docs = await readSpecDocs(specDir);
-    res = await runChat(tpl, `## 规格文档\n\n${docs}`, { provider: planner, maxTokens: 8000 });
+    res = await runChat(prompt, `## 规格文档\n\n${docs}`, { provider: planner, maxTokens: 8000 });
   } else {
-    res = await runAgent(tpl, {
+    res = await runAgent(prompt, {
       cwd: specDir,
       provider: planner,
       allowedTools: ["Read", "Grep", "Glob"],
@@ -93,23 +102,38 @@ export async function planSpec(
   let plan: PlanOut | null = null;
   let lastErr: Error | null = null;
   let planUsage: Usage = { ...ZERO };
-  for (let i = 0; i < chain.length; i++) {
+  // 每个 provider 先自重试一次（解析失败多是模型格式抖动，重试同一便宜 provider 比降级更省），
+  // 再降级到链上下一个。调用错(网络/auth)不自重试，直接降级。
+  const ATTEMPTS_PER_PROVIDER = 2;
+  outer: for (let i = 0; i < chain.length; i++) {
     const name = chain[i];
-    log.step(`拆解规格 ${specDir}（planner=${name}${i > 0 ? " · 降级" : ""}）`);
-    try {
-      const r = await callPlanner(name, tpl, specDir);
-      planUsage = add(planUsage, r.usage); // 失败降级的尝试也计成本
-      plan = r.plan;
-      if (plan) {
-        if (i > 0) log.ok(`planner 主选失败,降级用 ${name} 成功`);
-        break;
+    for (let a = 1; a <= ATTEMPTS_PER_PROVIDER; a++) {
+      const tag = `${i > 0 ? " · 降级" : ""}${a > 1 ? " · 自重试" : ""}`;
+      log.step(`拆解规格 ${specDir}（planner=${name}${tag}）`);
+      try {
+        const r = await callPlanner(name, tpl, specDir, a > 1);
+        planUsage = add(planUsage, r.usage); // 每次尝试都计成本
+        plan = r.plan;
+        if (plan) {
+          if (i > 0 || a > 1) log.ok(`planner 用 ${name}${a > 1 ? "(自重试)" : ""} 成功拆出任务`);
+          break outer;
+        }
+        log.warn(
+          `planner ${name} 未返回可解析任务` +
+            (a < ATTEMPTS_PER_PROVIDER
+              ? "，同一 provider 自重试"
+              : i < chain.length - 1
+                ? "，降级下一个"
+                : ""),
+        );
+      } catch (e) {
+        // 调用错(网络/auth/超时) = 真故障,自重试同 provider 无意义 → 直接降级下一个
+        lastErr = e as Error;
+        log.warn(
+          `planner ${name} 调用失败(${lastErr.message.slice(0, 80)})${i < chain.length - 1 ? "，降级下一个" : ""}`,
+        );
+        break; // 跳出自重试内层,进下一个 provider
       }
-      log.warn(`planner ${name} 未返回可解析任务${i < chain.length - 1 ? "，尝试下一个" : ""}`);
-    } catch (e) {
-      lastErr = e as Error;
-      log.warn(
-        `planner ${name} 调用失败(${lastErr.message.slice(0, 80)})${i < chain.length - 1 ? "，尝试下一个" : ""}`,
-      );
     }
   }
   if (!plan) {
