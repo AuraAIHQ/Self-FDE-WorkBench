@@ -102,12 +102,23 @@ export async function planSpec(
   let plan: PlanOut | null = null;
   let lastErr: Error | null = null;
   let planUsage: Usage = { ...ZERO };
-  // 每个 provider 先自重试一次（解析失败多是模型格式抖动，重试同一便宜 provider 比降级更省），
-  // 再降级到链上下一个。调用错(网络/auth)不自重试，直接降级。
-  const ATTEMPTS_PER_PROVIDER = 2;
+  // 成本护栏（CC-57 复盘）：一次 E2E 里 planner 降级到 claude 兜底,2 次调用就烧掉 ~$0.87
+  // （claude 按 API 价 ~$0.5/次,且走本机订阅额度）。两条对策：
+  //  1) 便宜 provider(glm/deepseek)多给一次自重试(3 次),尽量在便宜档就拆成功、别轻易降到 claude；
+  //  2) claude 兜底不做格式自重试（贵模型重试无非再烧一次,格式抖动概率也低）——只试 1 次。
+  // 便宜 provider 自重试 3 次、claude 只 1 次：解析失败多是格式抖动,重试便宜 provider 比降级更省。
+  const RETRIES_CHEAP = 3;
+  const RETRIES_EXPENSIVE = 1;
+  const isExpensive = (n: string) => n === "claude"; // 走订阅/按 API 价,贵
   outer: for (let i = 0; i < chain.length; i++) {
     const name = chain[i];
-    for (let a = 1; a <= ATTEMPTS_PER_PROVIDER; a++) {
+    const attemptsForProvider = isExpensive(name) ? RETRIES_EXPENSIVE : RETRIES_CHEAP;
+    if (isExpensive(name)) {
+      log.warn(
+        `planner 降级到 claude 兜底——按 API 价约 $0.5/次、且烧本机订阅额度;仅当更便宜的 planner 都失败时才到这`,
+      );
+    }
+    for (let a = 1; a <= attemptsForProvider; a++) {
       const tag = `${i > 0 ? " · 降级" : ""}${a > 1 ? " · 自重试" : ""}`;
       log.step(`拆解规格 ${specDir}（planner=${name}${tag}）`);
       try {
@@ -120,7 +131,7 @@ export async function planSpec(
         }
         log.warn(
           `planner ${name} 未返回可解析任务` +
-            (a < ATTEMPTS_PER_PROVIDER
+            (a < attemptsForProvider
               ? "，同一 provider 自重试"
               : i < chain.length - 1
                 ? "，降级下一个"
