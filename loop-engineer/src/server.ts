@@ -99,6 +99,42 @@ async function persist(rec: JobRecord): Promise<void> {
   }
 }
 
+/**
+ * Fix A（CC-57）：job 终态时把本 job 的 loop 用量按 project 回写进 fde-copilot 的 state.json，
+ * 让 `GET /api/usage` 的逐-project 项含真实 loop 编码成本（此前 p.usage 只被 chat 路由写，
+ * loop 成本只走回调 body / .loop/usage.json，从不进 /api/usage 读的 store）。
+ *
+ * `specDir` 就是 fde-copilot 的 project 目录（watchDir/<c>/projects/<p>），state.json 在此。
+ * 语义与 chat 侧一致（累加，非覆盖）；loop 的 `calls` 计入 fde 的 `turns` 计数。原子写（tmp+rename）
+ * 避免与并发的 /api/usage 读撞到半截文件。**每个 job 终态只调一次**（done 分支 + failed 兜底分支互斥）。
+ * 失败仅告警、不打断编排——回调 body 仍带 costUsd 作冗余口径。
+ */
+async function mergeLoopUsageIntoProjectState(specDir: string, u: Usage): Promise<void> {
+  const statePath = path.join(specDir, "state.json");
+  let state: Record<string, unknown>;
+  try {
+    state = JSON.parse(await fs.readFile(statePath, "utf8")) as Record<string, unknown>;
+  } catch {
+    // state.json 缺失（正常流程 chat 先跑会建它）——不凭空造 fde schema，跳过并告警。
+    log.warn(`Fix A：未找到 ${statePath}，跳过 loop usage 回写`);
+    return;
+  }
+  const prev = (state.usage ?? {}) as Record<string, number>;
+  state.usage = {
+    inputTokens: (prev.inputTokens ?? 0) + u.inputTokens,
+    outputTokens: (prev.outputTokens ?? 0) + u.outputTokens,
+    cacheReadTokens: (prev.cacheReadTokens ?? 0) + u.cacheReadTokens,
+    costUsd: (prev.costUsd ?? 0) + u.costUsd,
+    computeMs: (prev.computeMs ?? 0) + u.computeMs,
+    turns: (prev.turns ?? 0) + u.calls, // loop 的 calls 归入 fde 的 turns 计数
+  };
+  state.updatedAt = new Date().toISOString();
+  const tmp = `${statePath}.tmp`;
+  await fs.writeFile(tmp, JSON.stringify(state, null, 2) + "\n", "utf8");
+  await fs.rename(tmp, statePath); // 原子替换
+  log.ok(`Fix A：loop 成本回写 ${path.basename(specDir)}/state.usage（+$${u.costUsd.toFixed(4)}）`);
+}
+
 // —— 有界并发池（W7）——
 // 契约 v2 · B1:v1 默认串行(LOOP_CONCURRENCY=1);一场 Mini 几十个想法可把并发调高。
 // 以 repo 作 key → 同 repo 的 job 串行(worktree/集成分支互斥)、跨 repo 并行。
@@ -146,6 +182,9 @@ function enqueue(jobId: string): void {
       // 由 processJob 成功路径自己发，这里只兜底 failed，不会重复。
       const fin = registry.get(jobId);
       if (fin && fin.state === "failed") {
+        // Fix A（CC-57）：失败 job 也把已花的 loop 成本回写(与 done 分支互斥，各终态只一次)，
+        // 免得 /api/usage 对失败 build 少记账。与 failed 回调的 costUsd 同口径。
+        await mergeLoopUsageIntoProjectState(fin.specDir, fin.usage);
         await emitLifecycle({
           event: "failed",
           clientSlug: fin.clientSlug,
@@ -254,6 +293,9 @@ async function processJob(jobId: string, signal?: AbortSignal): Promise<void> {
       (r.pushed ? log.ok : log.warn)(`回推远程 ${job.remoteUrl}：${r.detail}`);
     }
     setState(rec, "done");
+    // Fix A（CC-57）：终态先把 loop 成本按 project 回写进 fde-copilot state.json，
+    // 再发 coding_done。时序保证 usage 早于 hack5 settle（deployed 时才拉 /api/usage）落位，无 race。
+    await mergeLoopUsageIntoProjectState(rec.specDir, rec.usage);
     // W4：coding 完成 → 广播 coding_done。部署归 hack5(只回调),此处不自部署。
     // sink 失败不影响 job 状态(emitLifecycle 内部各 sink 独立 try/catch)。
     await emitLifecycle({
