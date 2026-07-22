@@ -35,6 +35,10 @@ export async function GET(req: Request) {
       participants: perParticipant.length,
       subtotal,
       perParticipant,
+      // CC-57：同一份逐-project 数据也以 `perProject` 别名暴露（shape 对齐无-client 响应的
+      // perProject:[{client,project,usage}]），这样读 `u.perProject` 的老代码在 ?client= 下也
+      // 命中，免踩「client-scoped 响应只有 perParticipant」的 shape 差异（hack5 settle 落 0 的直接原因）。
+      perProject: perParticipant.map((p) => ({ client: c.slug, project: p.project, usage: p.usage })),
       at: new Date().toISOString(),
     });
   }
