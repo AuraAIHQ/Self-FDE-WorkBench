@@ -24,6 +24,8 @@
   },
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["LoopEngineerContainer"] }
-  ]
-  // "routes": [{ "pattern": "loop.aastar.io", "custom_domain": true }]
+  ],
+  // CC-58：直接部署到 CF（不再走 Mac Mini + Tunnel），复用原域名 loop.aastar.io 为 Custom Domain。
+  // 需该域名的 zone 已在你的 CF 账号；部署后 DNS 从 tunnel 切到本 Worker。
+  "routes": [{ "pattern": "loop.aastar.io", "custom_domain": true }]
 }

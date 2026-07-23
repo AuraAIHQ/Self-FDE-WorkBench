@@ -22,6 +22,7 @@
   },
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["FdeCopilotContainer"] }
-  ]
-  // "routes": [{ "pattern": "workbench.aastar.io", "custom_domain": true }]
+  ],
+  // CC-58：直接部署到 CF（不再走 Mac Mini + Tunnel），复用原域名 workbench.aastar.io 为 Custom Domain。
+  "routes": [{ "pattern": "workbench.aastar.io", "custom_domain": true }]
 }
