@@ -12,7 +12,7 @@
     {
       "class_name": "LoopEngineerContainer",
       // Dockerfile 在 loop-engineer/ 目录（相对本 wrangler 文件）
-      "image": "../../loop-engineer",
+      "image": "../../loop-engineer/Dockerfile",
       "instance_type": "standard-2",
       "max_instances": 1
     }
