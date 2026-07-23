@@ -3,14 +3,14 @@
 > **本文 = 把 WorkBench 平台（三个应用）架起来**，给运营方 / 自持者。
 > 用户**造好的专属工具**怎么部署与跑，见 [DEPLOY-TOOL.md](./DEPLOY-TOOL.md)。经济/计价见 [ECONOMIC_MODEL.md](./ECONOMIC_MODEL.md)。
 
-> **两种部署形态（CC-58）：**
-> - **默认 · Cloudflare 常驻容器**（推荐，7×24 在线，无本机依赖）：fde-copilot + loop-engineer 打进
->   **CF Container**（Worker + Durable Object 前置），API key 入 **CF Secret**，与 hack5 前台在线衔接，
->   Mac Mini 关机也不受影响。默认 `EXECUTION_MODE=api`：全走云 key（HiLinkup + DeepSeek），
->   **零本机 `claude login` 订阅、零官方 Anthropic key**。步骤见 [`deploy/README.md`](./deploy/README.md)。
->   （capability-packs 的本地 FLUX 生图仍需本机，属独立能力，不影响想法→应用主链路。）
-> - **opt-in · 本机自持**（自建 / 离线开发）：一台常驻 Mac Mini 跑全部 + Cloudflare Tunnel。
->   要复用本机订阅需显式设 `EXECUTION_MODE=local`。下文即此路径。
+> **部署形态（CC-58 定案：直接部署到 Cloudflare，停用 Mac Mini + Tunnel）：**
+> - **生产 · Cloudflare 常驻容器**（唯一在线形态，7×24，无本机依赖）：fde-copilot + loop-engineer 打进
+>   **CF Container**（Worker + Durable Object 前置），API key 入 **CF Secret**，与 hack5 前台云对云在线衔接。
+>   **复用原域名**：`loop.aastar.io`（loop-engineer）、`workbench.aastar.io`（fde-copilot）挂成 CF Worker 的
+>   **Custom Domain**（见 `deploy/*/wrangler.jsonc` 的 `routes`）——DNS 从原 Tunnel 切到 CF Worker。
+>   默认 `EXECUTION_MODE=api`：全走云 key（Workers AI→DeepSeek→HiLinkup 级联），**零本机订阅、零官方 Anthropic key**。步骤见 [`deploy/README.md`](./deploy/README.md)。
+> - **~~Mac Mini + Tunnel~~ 已停用**（生产不再用）。仅本地/离线开发时可跑本机实例并显式设 `EXECUTION_MODE=local` 复用订阅；
+>   capability-packs 的本地 FLUX 生图仍需本机，属独立能力，不影响想法→应用主链路。下文 Mac Mini 章节仅供本地开发参考。
 
 ## 这就是「自部署」路径（免费 · Apache 2.0 · 数字公共物品）
 
