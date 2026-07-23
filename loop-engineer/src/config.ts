@@ -69,6 +69,22 @@ export interface ResolvedProvider {
  * - `hilinkup` / `hilinkup:<model>`：OpenAI 兼容网关，单发 chat（一 key 多模型）
  * - `mock`：本地模拟
  */
+/**
+ * CC-58：chat 角色（planner/reviewer）的 failover 兜底 —— 默认 HiLinkup。
+ * 主 provider（如 workers-ai 配额用尽/限流）失败时，runChat 切到这个兜底。
+ * 未配 HILINKUP_API_KEY 则返回 undefined（无兜底，不抛错，主失败即失败）。
+ */
+export function resolveChatFallback(): ResolvedProvider | undefined {
+  if (!process.env.HILINKUP_API_KEY) return undefined;
+  const name = process.env.LOOP_CHAT_FALLBACK || "hilinkup:kimi-k2.5";
+  try {
+    const p = resolveProvider(name);
+    return p.kind === "openai-chat" ? p : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function resolveProvider(name: string): ResolvedProvider {
   if (name === "claude") {
     // 本机 claude login 订阅 = 显式 opt-in（CC-58）。默认云模式（EXECUTION_MODE=api）下禁用，
@@ -91,6 +107,20 @@ export function resolveProvider(name: string): ResolvedProvider {
     const apiKey = process.env.HILINKUP_API_KEY;
     if (!apiKey) throw new Error("hilinkup 缺少 HILINKUP_API_KEY（在 .env 配置）");
     if (!model) throw new Error(`hilinkup 需指定模型，如 "hilinkup:glm-5.1"（或设 HILINKUP_MODEL）`);
+    return { name, kind: "openai-chat", env: {}, baseUrl, apiKey, model, isMock: false };
+  }
+  // Cloudflare Workers AI（OpenAI 兼容端点，单发 chat）：workers-ai 或 workers-ai:<model>。
+  // CC-58：planner/reviewer 默认走 Workers AI（含额度）,用尽/限流 → runChat 层 failover 到 HiLinkup。
+  // 容器内直连 Workers AI REST + CF API Token（CLOUDFLARE_API_TOKEN/ACCOUNT_ID 入 CF Secret）。
+  if (name === "workers-ai" || name.startsWith("workers-ai:")) {
+    const model = name.includes(":")
+      ? name.slice(name.indexOf(":") + 1)
+      : process.env.WORKERS_AI_MODEL || "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
+    const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+    const apiKey = process.env.CLOUDFLARE_API_TOKEN;
+    if (!accountId) throw new Error("workers-ai 缺少 CLOUDFLARE_ACCOUNT_ID（在 .env / CF Secret 配置）");
+    if (!apiKey) throw new Error("workers-ai 缺少 CLOUDFLARE_API_TOKEN（在 .env / CF Secret 配置）");
+    const baseUrl = `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/v1`;
     return { name, kind: "openai-chat", env: {}, baseUrl, apiKey, model, isMock: false };
   }
   const n = name as ProviderName;

@@ -4,9 +4,9 @@
   "pollIntervalMs": 15000,
   "maxAttempts": 3,
   "providers": {
-    "planner": "hilinkup:glm-5.2",
+    "planner": "workers-ai",
     "coder": "deepseek",
-    "reviewer": "hilinkup:kimi-k2.5"
+    "reviewer": "workers-ai"
   },
-  "notes": "纯云配置(HiLinkup 主力 + DeepSeek):planner/reviewer 走 HiLinkup(OpenAI 兼容,一 key 多模型);coder 必须 Anthropic 兼容端点(HiLinkup 驱动不了 agentic claude -p),用 deepseek(api.deepseek.com/anthropic)。要用本机 claude 订阅可把某角色改回 'claude';无 key 本地跑通编排可改 'mock'。watchDirs 下任意含 loop.json 且有 todo 任务的目录会被当作 job。"
+  "notes": "CC-58 模型路由:planner/reviewer 默认走 Cloudflare Workers AI(含额度,OpenAI 兼容端点),配额用尽/限流自动 failover 到 HiLinkup(reviewer 走 runChat fallback;planner 走降级链默认 hilinkup:kimi-k2.5)。coder 必须 Anthropic 兼容端点(Workers AI/HiLinkup 都驱动不了 agentic claude -p),继续用 deepseek(api.deepseek.com/anthropic)。零官方 Anthropic key、零本机订阅(EXECUTION_MODE=api 默认;要用本机 claude 订阅显式 EXECUTION_MODE=local)。workers-ai 需 CLOUDFLARE_ACCOUNT_ID+CLOUDFLARE_API_TOKEN(入 CF Secret),模型默认 @cf/meta/llama-3.3-70b-instruct-fp8-fast(可设 WORKERS_AI_MODEL)。无 key 本地跑通编排可改 'mock'。"
 }

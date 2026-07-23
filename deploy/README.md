@@ -45,8 +45,9 @@ wrangler secret put DEEPSEEK_MODEL             # deepseek-v4-pro
 wrangler secret put WORKBENCH_CALLBACK_URL     # hack5 的 W5 回调接收端
 wrangler secret put WORKBENCH_CALLBACK_SECRET  # 回调 HMAC 共享密钥
 wrangler secret put WORKBENCH_PUSH_TOKEN       # 回推参赛者仓库（仓库级 fine-grained）
-wrangler secret put CLOUDFLARE_API_TOKEN       # /deploy CF Pages 用
-wrangler secret put CLOUDFLARE_ACCOUNT_ID
+wrangler secret put CLOUDFLARE_API_TOKEN       # Workers AI(planner/reviewer 默认) + /deploy CF Pages
+wrangler secret put CLOUDFLARE_ACCOUNT_ID      # Workers AI REST 端点用
+# 可选：WORKERS_AI_MODEL（默认 @cf/meta/llama-3.3-70b-instruct-fp8-fast）/ LOOP_CHAT_FALLBACK
 # 可选：LOOP_CONCURRENCY / LOOP_JOB_TIMEOUT_MS / LOOP_REPO_ROOT / WORKBENCH_ALLOWED_ORIGINS
 
 pnpm run deploy                                # wrangler 构建镜像 + 部署

@@ -191,9 +191,29 @@ function extractUsage(stdout: string, provider: ResolvedProvider): Usage {
 export async function runChat(
   system: string,
   user: string,
-  opts: { provider: ResolvedProvider; maxTokens?: number; timeoutMs?: number },
+  opts: { provider: ResolvedProvider; fallback?: ResolvedProvider; maxTokens?: number; timeoutMs?: number },
 ): Promise<RunAgentResult> {
-  const { provider } = opts;
+  // CC-58：主 provider（如 Workers AI 配额用尽/限流）在内部退避重试仍失败 → failover 到兜底
+  // provider（HiLinkup）。老调用不传 fallback，行为与之前完全一致。
+  try {
+    return await attemptChat(system, user, opts.provider, opts);
+  } catch (e) {
+    if (opts.fallback && opts.fallback.name !== opts.provider.name) {
+      console.error(
+        `[runChat] ${opts.provider.name} 失败(${(e as Error).message.slice(0, 100)}) → failover ${opts.fallback.name}`,
+      );
+      return attemptChat(system, user, opts.fallback, opts);
+    }
+    throw e;
+  }
+}
+
+async function attemptChat(
+  system: string,
+  user: string,
+  provider: ResolvedProvider,
+  opts: { maxTokens?: number; timeoutMs?: number },
+): Promise<RunAgentResult> {
   if (!provider.baseUrl || !provider.apiKey || !provider.model) {
     throw new Error(`runChat 需要 openai-chat 供应商（有 baseUrl/apiKey/model）：${provider.name}`);
   }
