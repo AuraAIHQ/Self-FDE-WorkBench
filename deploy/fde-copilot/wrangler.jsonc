@@ -10,7 +10,7 @@
   "containers": [
     {
       "class_name": "FdeCopilotContainer",
-      "image": "../../fde-copilot",
+      "image": "../../fde-copilot/Dockerfile",
       "instance_type": "standard-2",
       "max_instances": 1
     }
