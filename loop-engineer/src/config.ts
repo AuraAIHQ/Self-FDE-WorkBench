@@ -38,6 +38,15 @@ export async function loadConfig(): Promise<Config> {
   return cfg;
 }
 
+/**
+ * 执行模式：`api`（默认，云 key 驱动，无人值守/容器可跑）| `local`（显式 opt-in，
+ * 允许用本机 `claude login` 订阅）。CC-58：默认云化，彻底摆脱"某台 Mac Mini 醒着 +
+ * 交互式订阅态"的硬依赖；只有显式 `EXECUTION_MODE=local` 才放行裸 `claude` 订阅 provider。
+ */
+export function executionMode(): "api" | "local" {
+  return process.env.EXECUTION_MODE === "local" ? "local" : "api";
+}
+
 /** agentic = 起 `claude -p`（要 Anthropic 端点）；chat = 单发 OpenAI /chat/completions */
 export type ProviderKind = "anthropic-agentic" | "openai-chat" | "mock";
 
@@ -62,6 +71,14 @@ export interface ResolvedProvider {
  */
 export function resolveProvider(name: string): ResolvedProvider {
   if (name === "claude") {
+    // 本机 claude login 订阅 = 显式 opt-in（CC-58）。默认云模式（EXECUTION_MODE=api）下禁用，
+    // 避免容器/无人值守环境里静默依赖不存在的订阅态而无限排队。切 EXECUTION_MODE=local 才放行。
+    if (executionMode() !== "local") {
+      throw new Error(
+        `provider "claude"（本机订阅）需显式 opt-in：设 EXECUTION_MODE=local 才可用。` +
+          `默认云模式请用云 provider（hilinkup:* 或 deepseek，key 走 .env / CF Secret）。`,
+      );
+    }
     return { name, kind: "anthropic-agentic", env: {}, isMock: false };
   }
   if (name === "mock") {
