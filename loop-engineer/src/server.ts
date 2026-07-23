@@ -6,7 +6,8 @@
  * 复用现有函数：planSpec（planner.ts）、runTask（orchestrator.ts）、jobs.ts 的 job 模型。
  *
  * 契约（见 docs/hack5-对接-实现计划.md §1）：
- *   POST /plan      { clientSlug, projectSlug, repo } → { jobId }
+ *   POST /plan      { clientSlug, projectSlug, repo, spec? } → { jobId }
+ *                   spec 可选：markdown 全文，内联"上传现成 spec 一键构建"，写进 specDir 当 SPEC.md 直接建 job。
  *   POST /run       { jobId }                         → { started, state }
  *   GET  /status/:jobId  → { state, progress{total,done,percent,current}, tasks[], costUsd, prUrl?, appUrl? }
  *   GET  /spec/:jobId    → { spec, docs{}, tasks[] }  —— 正在基于哪些规格开发 + 任务清单
@@ -472,8 +473,30 @@ async function handlePlan(req: IncomingMessage, res: ServerResponse): Promise<vo
     send(res, 400, { error: (e as Error).message });
     return;
   }
+  // 内联 spec（"上传现成 spec 一键构建"）：body 带 markdown 全文 `spec` 时，直接写进 specDir 当 SPEC.md，
+  // 无需预先存在规格目录。CC-58 容器拆分后 loop-engineer 读不到 fde-copilot 的 clients 目录，故支持随请求带上。
+  const spec = typeof body.spec === "string" ? body.spec : undefined;
+  if (spec !== undefined) {
+    if (spec.trim().length === 0) {
+      send(res, 400, { error: "spec 为空" });
+      return;
+    }
+    if (spec.length > 512 * 1024) {
+      send(res, 400, { error: "spec 过大（上限 512KB）" });
+      return;
+    }
+    try {
+      await fs.mkdir(specDir, { recursive: true });
+      await fs.writeFile(path.join(specDir, "SPEC.md"), spec.endsWith("\n") ? spec : spec + "\n", "utf8");
+    } catch (e) {
+      send(res, 500, { error: `写入 spec 失败：${(e as Error).message}` });
+      return;
+    }
+  }
   if (!(await exists(specDir))) {
-    send(res, 404, { error: `规格目录不存在：${specDir}` });
+    send(res, 404, {
+      error: `规格目录不存在：${specDir}（未上传 spec 且无预置规格。可在 /plan body 带 spec: <markdown> 内联上传）`,
+    });
     return;
   }
 
